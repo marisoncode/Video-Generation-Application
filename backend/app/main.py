@@ -14,6 +14,7 @@ from typing import Optional, Dict, Any, List
 from app.core.config import settings
 from app.services.pipeline_service import pipeline_service
 from app.services.kling_service import kling_service
+from app.services.did_service import did_service
 
 app = FastAPI(
     title="AI Animated Explainer Video Studio",
@@ -37,8 +38,12 @@ app.mount("/static/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="
 
 # Schemas
 class KlingConfigPayload(BaseModel):
-    access_key: str
-    secret_key: str
+    api_key: Optional[str] = None
+    access_key: Optional[str] = None
+    secret_key: Optional[str] = None
+
+class DidConfigPayload(BaseModel):
+    api_key: str
 
 class CustomVideoPayload(BaseModel):
     title: Optional[str] = ""
@@ -73,12 +78,46 @@ def get_voices():
         }
     ]
 
+@app.get("/api/v1/did/status")
+def get_did_status():
+    """Returns whether D-ID credentials are configured."""
+    is_conf = did_service.is_configured()
+    ak = os.getenv("DID_API_KEY", "").strip()
+    masked = (ak[:6] + "..." + ak[-4:]) if len(ak) > 10 else ("Configured" if is_conf else "")
+    return {
+        "configured": is_conf,
+        "api_key_preview": masked
+    }
+
+@app.post("/api/v1/did/config")
+def update_did_config(payload: DidConfigPayload):
+    """Saves D-ID API credentials into environment and .env file."""
+    clean_key = payload.api_key.strip()
+    os.environ["DID_API_KEY"] = clean_key
+    did_service.api_key = clean_key
+
+    env_file = os.path.join(settings.BASE_DIR, ".env")
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            if "DID_API_KEY=" in content:
+                content = re.sub(r'DID_API_KEY=.*', f'DID_API_KEY={clean_key}', content)
+            else:
+                content += f"\nDID_API_KEY={clean_key}\n"
+            with open(env_file, "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception as e:
+            print(f"Error persisting .env for D-ID: {e}")
+
+    return {"status": "ok", "configured": did_service.is_configured()}
+
 @app.get("/api/v1/kling/status")
 def get_kling_status():
     """Returns whether Kling credentials are configured."""
     is_conf = kling_service.is_configured()
-    ak = os.getenv("KLING_ACCESS_KEY", "").strip()
-    masked = (ak[:4] + "..." + ak[-4:]) if len(ak) > 8 else ("Configured" if is_conf else "")
+    ak = os.getenv("KLING_API_KEY", "").strip() or os.getenv("KLING_ACCESS_KEY", "").strip()
+    masked = (ak[:6] + "..." + ak[-4:]) if len(ak) > 10 else ("Configured" if is_conf else "")
     return {
         "configured": is_conf,
         "access_key_preview": masked
@@ -87,20 +126,43 @@ def get_kling_status():
 @app.post("/api/v1/kling/config")
 def update_kling_config(payload: KlingConfigPayload):
     """Saves Kling API credentials into environment and .env file."""
-    os.environ["KLING_ACCESS_KEY"] = payload.access_key.strip()
-    os.environ["KLING_SECRET_KEY"] = payload.secret_key.strip()
-    kling_service.access_key = payload.access_key.strip()
-    kling_service.secret_key = payload.secret_key.strip()
-
     env_file = os.path.join(settings.BASE_DIR, ".env")
+    env_content = ""
     if os.path.exists(env_file):
         try:
             with open(env_file, "r", encoding="utf-8") as f:
-                content = f.read()
-            content = re.sub(r'KLING_ACCESS_KEY=.*', f'KLING_ACCESS_KEY={payload.access_key.strip()}', content)
-            content = re.sub(r'KLING_SECRET_KEY=.*', f'KLING_SECRET_KEY={payload.secret_key.strip()}', content)
+                env_content = f.read()
+        except Exception:
+            pass
+
+    if payload.api_key:
+        k = payload.api_key.strip()
+        if "..." in k or "***" in k:
+            return {"status": "error", "message": "Masked key cannot be saved. Please paste your full unmasked key.", "configured": kling_service.is_configured()}
+        os.environ["KLING_API_KEY"] = k
+        kling_service.api_key = k
+        if "KLING_API_KEY=" in env_content:
+            env_content = re.sub(r'KLING_API_KEY=.*', f'KLING_API_KEY={k}', env_content)
+        else:
+            env_content += f"\nKLING_API_KEY={k}\n"
+
+    if payload.access_key and payload.secret_key:
+        ak = payload.access_key.strip()
+        sk = payload.secret_key.strip()
+        os.environ["KLING_ACCESS_KEY"] = ak
+        os.environ["KLING_SECRET_KEY"] = sk
+        kling_service.access_key = ak
+        kling_service.secret_key = sk
+        if "KLING_ACCESS_KEY=" in env_content:
+            env_content = re.sub(r'KLING_ACCESS_KEY=.*', f'KLING_ACCESS_KEY={ak}', env_content)
+            env_content = re.sub(r'KLING_SECRET_KEY=.*', f'KLING_SECRET_KEY={sk}', env_content)
+        else:
+            env_content += f"\nKLING_ACCESS_KEY={ak}\nKLING_SECRET_KEY={sk}\n"
+
+    if env_content and os.path.exists(env_file):
+        try:
             with open(env_file, "w", encoding="utf-8") as f:
-                f.write(content)
+                f.write(env_content)
         except Exception as e:
             print(f"Error persisting .env: {e}")
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Image as ImageIcon, Sparkles, Film, Mic, X, CheckCircle2, Music, Plus, Trash2 } from 'lucide-react';
 
-export default function DirectorWorkspace({ config, onChangeConfig, voices, selectedVoice, onSelectVoice }) {
+export default function DirectorWorkspace({ config, onChangeConfig, voices, selectedVoice, onSelectVoice, klingConfigured, didConfigured }) {
   const [uploadingIdx, setUploadingIdx] = useState(null);
   const [uploadingVoice, setUploadingVoice] = useState(false);
   const [customVoiceName, setCustomVoiceName] = useState(config.custom_voice_name || '');
@@ -52,6 +52,7 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
       image_path: '',
       preview_url: '',
       motion_prompt: '',
+      motion_style: 'auto',
       narration: '',
       subtitle: ''
     };
@@ -289,9 +290,19 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-slate-400 font-medium hidden md:inline-block">
-                      Kling Animated
-                    </span>
+                    {klingConfigured ? (
+                      <span className="text-[11px] bg-purple-50 text-purple-700 font-semibold px-2 py-0.5 rounded-md border border-purple-200 hidden sm:inline-block">
+                        ✨ Kling AI Video
+                      </span>
+                    ) : didConfigured ? (
+                      <span className="text-[11px] bg-blue-50 text-blue-700 font-semibold px-2 py-0.5 rounded-md border border-blue-200 hidden sm:inline-block">
+                        🎭 D-ID Facial Expressions Active
+                      </span>
+                    ) : (
+                      <span className="text-[11px] bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-md border border-emerald-200 hidden sm:inline-block">
+                        ⚡ Free Dynamic Motion ($0)
+                      </span>
+                    )}
                     {scenes.length > 1 && (
                       <button
                         type="button"
@@ -355,12 +366,31 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
                     </div>
                   </div>
 
-                  {/* Right: Motion Prompt, Narration & Subtitle */}
+                  {/* Right: Motion Prompt, Camera Motion, Narration & Subtitle */}
                   <div className="md:col-span-8 space-y-3">
+                    {/* Camera Motion Style & Kling Status */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                      <span className="text-[11px] font-bold text-slate-700">
+                        Camera Motion:
+                      </span>
+                      <select
+                        value={scene.motion_style || 'auto'}
+                        onChange={(e) => handleSceneChange(idx, 'motion_style', e.target.value)}
+                        className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-purple-600 transition cursor-pointer"
+                      >
+                        <option value="auto">🎬 Auto Cinematic (Smart Director)</option>
+                        <option value="zoom_in">🔍 Slow Push-In (Zoom In)</option>
+                        <option value="zoom_out">🔎 Smooth Pull-Back (Zoom Out)</option>
+                        <option value="pan_right">➡️ Cinematic Pan Right</option>
+                        <option value="pan_left">⬅️ Cinematic Pan Left</option>
+                        <option value="static">⏸️ Static Frame (No Camera Move)</option>
+                      </select>
+                    </div>
+
                     {/* Kling Motion Prompt */}
                     <div>
                       <label className="text-[11px] font-bold text-purple-900 block mb-1">
-                        Kling Motion Prompt (Camera & Character Action):
+                        Kling AI Motion Prompt (Used when Kling Key is connected):
                       </label>
                       <textarea
                         rows={2}

@@ -6,6 +6,8 @@ from app.core.config import settings
 from app.services.tts_service import tts_service
 from app.services.video_service import video_service
 from app.services.kling_service import kling_service
+from app.services.did_service import did_service
+from app.services.free_motion_service import free_motion_service
 
 # In-memory Job registry
 JOBS: Dict[str, Dict[str, Any]] = {}
@@ -110,12 +112,33 @@ class PipelineService:
                         print(f"[Pipeline] Kling animation error on scene {s_num}: {ex}")
                         kling_clip = None
 
+                # 2b. Animate Face with D-ID (real blinking, facial expressions & lip-sync)
+                did_clip = None
+                if not kling_clip and resolved_img and did_service.is_configured():
+                    try:
+                        job["step_message"] = f"D-ID animating real facial expressions & lip-sync for Scene {s_num}/{total_scenes}..."
+                        did_clip = did_service.animate_portrait(resolved_img, audio_path)
+                    except Exception as ex:
+                        print(f"[Pipeline] D-ID facial animation notice: {ex}")
+                        did_clip = None
+
                 # 3. Render final clip with synchronized audio & subtitles
                 if kling_clip and os.path.exists(kling_clip):
                     video_service.render_motion_clip(kling_clip, audio_path, subtitle, clip_path, header_title=s_title, narration=narration)
+                elif did_clip and os.path.exists(did_clip):
+                    video_service.render_motion_clip(did_clip, audio_path, subtitle, clip_path, header_title=s_title, narration=narration)
                 elif resolved_img and os.path.exists(resolved_img):
-                    # Image available: render image clip with audio & subtitle
-                    video_service.render_image_audio_clip(resolved_img, audio_path, subtitle, clip_path, narration=narration)
+                    # 1080p Cinematic Camera Motion Engine (Ken Burns push-in / pull-back / pan)
+                    scene_motion_style = scene.get("motion_style") or "auto"
+                    video_service.render_image_audio_clip(
+                        image_path=resolved_img,
+                        audio_path=audio_path,
+                        subtitle_text=subtitle,
+                        output_clip_path=clip_path,
+                        narration=narration,
+                        motion_style=scene_motion_style,
+                        scene_index=idx
+                    )
                 else:
                     # Fallback slate clip with audio and subtitle
                     video_service.render_motion_clip("", audio_path, subtitle, clip_path, header_title=s_title, narration=narration)

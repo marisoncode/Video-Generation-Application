@@ -7,17 +7,36 @@ from typing import Optional, Dict, Any
 from app.core.config import settings
 
 class KlingService:
-    BASE_URL = "https://api.klingai.com"
+    BASE_URL = os.getenv("KLING_BASE_URL", "https://api.klingai.com").strip()
 
     def __init__(self):
+        self.api_key = os.getenv("KLING_API_KEY", "").strip()
         self.access_key = os.getenv("KLING_ACCESS_KEY", "").strip()
         self.secret_key = os.getenv("KLING_SECRET_KEY", "").strip()
 
     def is_configured(self) -> bool:
         """Checks if Kling credentials are set in environment."""
+        self.api_key = os.getenv("KLING_API_KEY", "").strip()
         self.access_key = os.getenv("KLING_ACCESS_KEY", "").strip()
         self.secret_key = os.getenv("KLING_SECRET_KEY", "").strip()
-        return bool(self.access_key and self.secret_key)
+        return bool(self.api_key or (self.access_key and self.secret_key))
+
+    def get_auth_headers(self) -> Dict[str, str]:
+        """Returns Bearer header for single API Key or generated JWT for AK/SK pair."""
+        self.api_key = os.getenv("KLING_API_KEY", "").strip()
+        self.access_key = os.getenv("KLING_ACCESS_KEY", "").strip()
+        self.secret_key = os.getenv("KLING_SECRET_KEY", "").strip()
+        if self.api_key:
+            token = self.api_key
+        elif self.access_key and self.secret_key:
+            token = self.generate_jwt_token()
+        else:
+            raise ValueError("Kling AI API key must be set in backend/.env")
+
+        return {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
 
     def generate_jwt_token(self) -> str:
         """Generates a timed JWT authorization token for Kling AI API."""
@@ -76,33 +95,77 @@ class KlingService:
 
         # 2. Submit task
         endpoint = f"{self.BASE_URL}/v1/videos/image2video"
-        token = self.generate_jwt_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
+        headers = self.get_auth_headers()
 
         dur_str = "10" if duration_sec >= 8 else "5"
-        payload: Dict[str, Any] = {
-            "model_name": "kling-v1",
-            "image": image_data,
-            "prompt": motion_prompt,
-            "duration": dur_str,
-            "mode": mode,
-            "cfg_scale": 0.5
-        }
+        
+        # Ensure facial expressions, eye blinking, and lifelike cues are present in prompt
+        enhanced_prompt = motion_prompt
+        lp = motion_prompt.lower()
+        if not any(k in lp for k in ["blink", "expression", "facial", "smile", "talking", "lipsync", "mouth"]):
+            enhanced_prompt = f"{motion_prompt}, highly expressive facial expressions, blinking eyes naturally, subtle smile, lively face animation"
 
-        print(f"[KLING AI] Submitting Image-to-Video task for prompt: '{motion_prompt[:50]}...'")
-        res = requests.post(endpoint, headers=headers, json=payload, timeout=60)
-        if res.status_code != 200:
-            raise RuntimeError(f"Kling API returned HTTP {res.status_code}: {res.text}")
+        configured_model = os.getenv("KLING_MODEL_NAME", "kling-v1-6").strip()
+        candidate_models = [
+            configured_model,
+            "kling-v1-6",
+            "kling-v1-5",
+            "kling-v2-1",
+            "kling-2.6",
+            "kling-3.0"
+        ]
+        # Deduplicate while preserving priority order
+        models_to_try = []
+        for m in candidate_models:
+            if m and m not in models_to_try:
+                models_to_try.append(m)
 
-        res_json = res.json()
-        if res_json.get("code") != 0:
-            raise RuntimeError(f"Kling API error: {res_json.get('message', res_json)}")
+        task_id = None
+        last_error = None
 
-        task_id = res_json["data"]["task_id"]
-        print(f"[KLING AI] Task created successfully! Task ID: {task_id}")
+        for m_name in models_to_try:
+            payload: Dict[str, Any] = {
+                "model_name": m_name,
+                "image": image_data,
+                "prompt": enhanced_prompt,
+                "duration": dur_str,
+                "mode": mode,
+                "cfg_scale": 0.5
+            }
+
+            print(f"[KLING AI] Submitting Image-to-Video task with model '{m_name}' for prompt: '{motion_prompt[:50]}...'")
+            try:
+                res = requests.post(endpoint, headers=headers, json=payload, timeout=60)
+            except Exception as net_err:
+                last_error = f"Network error submitting to Kling: {net_err}"
+                continue
+
+            if res.status_code == 200:
+                res_json = res.json()
+                if res_json.get("code") == 0:
+                    task_id = res_json["data"]["task_id"]
+                    print(f"[KLING AI] Task created successfully with '{m_name}'! Task ID: {task_id}")
+                    break
+                else:
+                    code = res_json.get("code")
+                    err_msg = res_json.get("message", str(res_json))
+                    last_error = f"Kling error ({code}): {err_msg}"
+                    print(f"[KLING AI] Model '{m_name}' returned error: {last_error}")
+                    # If model discontinued or not supported, try next model candidate
+                    if code == 1203 or "discontinued" in err_msg.lower() or "not available" in err_msg.lower() or "model" in err_msg.lower():
+                        continue
+                    else:
+                        raise RuntimeError(last_error)
+            else:
+                last_error = f"Kling API returned HTTP {res.status_code}: {res.text}"
+                print(f"[KLING AI] Model '{m_name}' failed with {res.status_code}: {res.text}")
+                if "discontinued" in res.text.lower() or "1203" in res.text or "not available" in res.text.lower():
+                    continue
+                else:
+                    raise RuntimeError(last_error)
+
+        if not task_id:
+            raise RuntimeError(f"Could not submit Kling task with any supported model. Last error: {last_error}")
 
         # 3. Poll for status
         status_endpoint = f"{self.BASE_URL}/v1/videos/image2video/{task_id}"
@@ -113,8 +176,7 @@ class KlingService:
         video_url = None
         while time.time() - start_time < max_wait:
             time.sleep(poll_interval)
-            token = self.generate_jwt_token()
-            headers["Authorization"] = f"Bearer {token}"
+            headers = self.get_auth_headers()
             poll_res = requests.get(status_endpoint, headers=headers, timeout=30)
             
             if poll_res.status_code != 200:

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Film, Key, Check } from 'lucide-react';
 
-export default function Header({ klingConfigured, onOpenKlingModal }) {
+export default function Header({ klingConfigured, onOpenKlingModal, didConfigured, onOpenDidModal }) {
   return (
     <header className="border-b border-slate-200 bg-white sticky top-0 z-40 px-4 sm:px-6 lg:px-8 py-3.5 shadow-sm">
       <div className="max-w-[1680px] w-full mx-auto flex items-center justify-between">
@@ -16,8 +16,33 @@ export default function Header({ klingConfigured, onOpenKlingModal }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap justify-end">
+          {/* D-ID Free Facial Motion */}
           <button
+            type="button"
+            onClick={onOpenDidModal}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition ${
+              didConfigured
+                ? 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100'
+                : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+            }`}
+          >
+            {didConfigured ? (
+              <>
+                <Check className="w-3 h-3 text-blue-600" />
+                <span>D-ID Talking Face Connected</span>
+              </>
+            ) : (
+              <>
+                <Key className="w-3 h-3 text-blue-600" />
+                <span>Connect D-ID Key (Free Facial Motion)</span>
+              </>
+            )}
+          </button>
+
+          {/* Kling AI Key */}
+          <button
+            type="button"
             onClick={onOpenKlingModal}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition ${
               klingConfigured

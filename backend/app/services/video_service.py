@@ -74,7 +74,7 @@ class VideoService:
         height: int = 1080
     ) -> str:
         """
-        Renders an authentic moving 1080p video clip synchronized with audio narration
+        Renders an animated moving 1080p video clip synchronized with audio narration
         and sentence-timed subtitles.
         """
         os.makedirs(os.path.dirname(output_clip_path), exist_ok=True)
@@ -105,7 +105,7 @@ class VideoService:
                 output_clip_path
             ]
         else:
-            # Fallback when video source is not found: render modern slate background
+            # Fallback slate background
             filter_complex = (
                 f"[0:v]subtitles='{srt_filter_arg}':force_style="
                 f"'FontName=Arial,FontSize=16,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
@@ -139,39 +139,95 @@ class VideoService:
         subtitle_text: str,
         output_clip_path: str,
         narration: Optional[str] = None,
+        motion_style: str = "auto",
+        scene_index: int = 0,
         width: int = 1920,
         height: int = 1080
     ) -> str:
         """
-        Compiles a single 1080p video clip from a slide image and TTS audio narration
-        with burned sentence-timed subtitles displaying the exact words spoken.
+        Renders a cinematic 1080p video clip from a slide image with dynamic camera motion
+        (Ken Burns zoom-in, pull-back, pan) and speech-synchronized burned subtitles.
         """
         os.makedirs(os.path.dirname(output_clip_path), exist_ok=True)
         dur = cls.get_audio_duration(audio_path)
+        fps = 30
+        d_frames = max(30, int(dur * fps))
 
         speech_text = narration.strip() if (narration and narration.strip()) else subtitle_text.strip()
         srt_path = output_clip_path + ".srt"
         cls.create_scene_srt(speech_text, dur, srt_path)
-
         srt_filter_arg = srt_path.replace("\\", "/").replace(":", "\\:")
-        vf_arg = (
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
-            f"subtitles='{srt_filter_arg}':force_style="
-            f"'FontName=Arial,FontSize=16,Bold=0,PrimaryColour=&H00FFFFFF,BackColour=&HA00C1220,"
-            f"BorderStyle=4,Outline=0,Shadow=0,MarginV=30,Alignment=2'"
-        )
 
-        cmd = [
-            FFMPEG_BIN, "-y",
-            "-loop", "1", "-i", image_path,
-            "-i", audio_path,
-            "-vf", vf_arg,
-            "-t", str(dur),
-            "-c:v", "libx264", "-preset", "ultrafast",
-            "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
-            "-pix_fmt", "yuv420p",
-            output_clip_path
-        ]
+        # Resolve motion style
+        resolved_style = motion_style.lower() if motion_style else "auto"
+        if resolved_style == "auto":
+            auto_sequence = ["zoom_in", "pan_right", "zoom_out", "pan_left"]
+            resolved_style = auto_sequence[scene_index % len(auto_sequence)]
+
+        # Define dynamic motion expressions for zoompan
+        if resolved_style in ["zoom_in", "push_in"]:
+            z_expr = "min(zoom+0.0006,1.18)"
+            x_expr = "iw/2-(iw/zoom/2)"
+            y_expr = "ih/2-(ih/zoom/2)"
+            has_motion = True
+        elif resolved_style in ["zoom_out", "pull_back"]:
+            z_expr = "if(lte(zoom,1.0),1.18,max(1.001,zoom-0.0006))"
+            x_expr = "iw/2-(iw/zoom/2)"
+            y_expr = "ih/2-(ih/zoom/2)"
+            has_motion = True
+        elif resolved_style in ["pan_right", "dolly_right"]:
+            z_expr = "1.12"
+            x_expr = "min(iw-iw/zoom,on*0.6)"
+            y_expr = "ih/2-(ih/zoom/2)"
+            has_motion = True
+        elif resolved_style in ["pan_left", "dolly_left"]:
+            z_expr = "1.12"
+            x_expr = "max(0,(iw-iw/zoom)-on*0.6)"
+            y_expr = "ih/2-(ih/zoom/2)"
+            has_motion = True
+        else:
+            has_motion = False
+
+        if has_motion:
+            filter_complex = (
+                f"[0:v]scale=2560:1440,setsar=1,"
+                f"zoompan=z='{z_expr}':x='{x_expr}':y='{y_expr}':d={d_frames}:s={width}x{height}:fps={fps},"
+                f"subtitles='{srt_filter_arg}':force_style="
+                f"'FontName=Arial,FontSize=16,Bold=0,PrimaryColour=&H00FFFFFF,BackColour=&HA00C1220,"
+                f"BorderStyle=4,Outline=0,Shadow=0,MarginV=30,Alignment=2'[v]"
+            )
+            cmd = [
+                FFMPEG_BIN, "-y",
+                "-loop", "1", "-i", image_path,
+                "-i", audio_path,
+                "-filter_complex", filter_complex,
+                "-map", "[v]", "-map", "1:a",
+                "-t", str(dur),
+                "-c:v", "libx264", "-preset", "ultrafast",
+                "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+                "-pix_fmt", "yuv420p",
+                output_clip_path
+            ]
+        else:
+            # Static fallback with centered aspect framing
+            vf_arg = (
+                f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
+                f"subtitles='{srt_filter_arg}':force_style="
+                f"'FontName=Arial,FontSize=16,Bold=0,PrimaryColour=&H00FFFFFF,BackColour=&HA00C1220,"
+                f"BorderStyle=4,Outline=0,Shadow=0,MarginV=30,Alignment=2'"
+            )
+            cmd = [
+                FFMPEG_BIN, "-y",
+                "-loop", "1", "-i", image_path,
+                "-i", audio_path,
+                "-vf", vf_arg,
+                "-t", str(dur),
+                "-c:v", "libx264", "-preset", "ultrafast",
+                "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+                "-pix_fmt", "yuv420p",
+                output_clip_path
+            ]
+
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         if os.path.exists(srt_path):

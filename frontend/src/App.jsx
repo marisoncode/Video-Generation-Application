@@ -3,6 +3,7 @@ import Header from './components/Header';
 import DirectorWorkspace from './components/DirectorWorkspace';
 import ProductionMonitor from './components/ProductionMonitor';
 import KlingApiKeyModal from './components/KlingApiKeyModal';
+import DidApiKeyModal from './components/DidApiKeyModal';
 
 export default function App() {
   const [config, setConfig] = useState({
@@ -45,7 +46,9 @@ export default function App() {
   ]);
   const [selectedVoice, setSelectedVoice] = useState('Reference Voice Clone (100% Match)');
   const [klingConfigured, setKlingConfigured] = useState(false);
+  const [didConfigured, setDidConfigured] = useState(false);
   const [isKlingModalOpen, setIsKlingModalOpen] = useState(false);
+  const [isDidModalOpen, setIsDidModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -88,6 +91,12 @@ export default function App() {
       .then(res => res.json())
       .then(data => setKlingConfigured(data.configured))
       .catch(err => console.error('Error loading Kling status:', err));
+
+    // Fetch D-ID status
+    fetch('/api/v1/did/status')
+      .then(res => res.json())
+      .then(data => setDidConfigured(data.configured))
+      .catch(err => console.error('Error loading D-ID status:', err));
   }, []);
 
   const handleVoiceSelect = (voiceId) => {
@@ -100,6 +109,8 @@ export default function App() {
       <Header
         klingConfigured={klingConfigured}
         onOpenKlingModal={() => setIsKlingModalOpen(true)}
+        didConfigured={didConfigured}
+        onOpenDidModal={() => setIsDidModalOpen(true)}
       />
 
       <main className="flex-1 max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -117,6 +128,8 @@ export default function App() {
                 voices={voices}
                 selectedVoice={selectedVoice}
                 onSelectVoice={handleVoiceSelect}
+                klingConfigured={klingConfigured}
+                didConfigured={didConfigured}
               />
             </section>
 
@@ -134,6 +147,12 @@ export default function App() {
         isOpen={isKlingModalOpen}
         onClose={() => setIsKlingModalOpen(false)}
         onConfigSaved={() => setKlingConfigured(true)}
+      />
+
+      <DidApiKeyModal
+        isOpen={isDidModalOpen}
+        onClose={() => setIsDidModalOpen(false)}
+        onConfigSaved={() => setDidConfigured(true)}
       />
 
       <footer className="border-t border-slate-200 bg-white px-6 py-4 text-center text-xs text-slate-400">
