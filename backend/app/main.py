@@ -12,8 +12,6 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
 from app.core.config import settings
-from app.services.curriculum_service import curriculum_service
-from app.services.tts_service import tts_service
 from app.services.pipeline_service import pipeline_service
 from app.services.kling_service import kling_service
 

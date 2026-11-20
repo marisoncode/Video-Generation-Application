@@ -3,7 +3,6 @@ import re
 import subprocess
 from typing import List, Optional
 import imageio_ffmpeg
-from app.core.config import settings
 
 FFMPEG_BIN = imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -65,7 +64,7 @@ class VideoService:
     @classmethod
     def render_motion_clip(
         cls,
-        template_name: str,
+        video_source_path: str,
         audio_path: str,
         subtitle_text: str,
         output_clip_path: str,
@@ -75,65 +74,62 @@ class VideoService:
         height: int = 1080
     ) -> str:
         """
-        Renders an authentic moving 1080p 3D video clip without cropping the video size,
-        synchronized with the newly generated audio narration and compact, elegant sentence-timed subtitles.
+        Renders an authentic moving 1080p video clip synchronized with audio narration
+        and sentence-timed subtitles.
         """
         os.makedirs(os.path.dirname(output_clip_path), exist_ok=True)
-        if os.path.exists(template_name):
-            template_path = template_name
-        else:
-            template_path = os.path.join(settings.BASE_DIR, "storage", "visual_cache", "motion_templates", f"{template_name}.mp4")
-            if not os.path.exists(template_path):
-                template_path = os.path.join(settings.BASE_DIR, "storage", "visual_cache", f"{template_name}.mp4")
-
         dur = cls.get_audio_duration(audio_path)
         speech_text = narration.strip() if (narration and narration.strip()) else subtitle_text.strip()
         srt_path = output_clip_path + ".srt"
         cls.create_scene_srt(speech_text, dur, srt_path)
 
         srt_filter_arg = srt_path.replace("\\", "/").replace(":", "\\:")
-        filter_complex = (
-            f"[0:v]scale=1920:1080,setsar=1,fps=30,"
-            f"subtitles='{srt_filter_arg}':force_style="
-            f"'FontName=Arial,FontSize=15,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-            f"BackColour=&HA00C1220,BorderStyle=4,Outline=1,Shadow=0,MarginV=30,Alignment=2'[v]"
-        )
 
-        cmd = [
-            FFMPEG_BIN, "-y",
-            "-stream_loop", "-1", "-i", template_path,
-            "-i", audio_path,
-            "-filter_complex", filter_complex,
-            "-map", "[v]", "-map", "1:a",
-            "-t", str(dur),
-            "-c:v", "libx264", "-preset", "ultrafast",
-            "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
-            "-pix_fmt", "yuv420p",
-            output_clip_path
-        ]
+        if os.path.exists(video_source_path):
+            filter_complex = (
+                f"[0:v]scale={width}:{height},setsar=1,fps=30,"
+                f"subtitles='{srt_filter_arg}':force_style="
+                f"'FontName=Arial,FontSize=15,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+                f"BackColour=&HA00C1220,BorderStyle=4,Outline=1,Shadow=0,MarginV=30,Alignment=2'[v]"
+            )
+            cmd = [
+                FFMPEG_BIN, "-y",
+                "-stream_loop", "-1", "-i", video_source_path,
+                "-i", audio_path,
+                "-filter_complex", filter_complex,
+                "-map", "[v]", "-map", "1:a",
+                "-t", str(dur),
+                "-c:v", "libx264", "-preset", "ultrafast",
+                "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+                "-pix_fmt", "yuv420p",
+                output_clip_path
+            ]
+        else:
+            # Fallback when video source is not found: render modern slate background
+            filter_complex = (
+                f"[0:v]subtitles='{srt_filter_arg}':force_style="
+                f"'FontName=Arial,FontSize=16,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+                f"BackColour=&HA00C1220,BorderStyle=4,Outline=1,Shadow=0,MarginV=30,Alignment=2'[v]"
+            )
+            cmd = [
+                FFMPEG_BIN, "-y",
+                "-f", "lavfi", "-i", f"color=c=0x0f172a:s={width}x{height}:r=30",
+                "-i", audio_path,
+                "-filter_complex", filter_complex,
+                "-map", "[v]", "-map", "1:a",
+                "-t", str(dur),
+                "-c:v", "libx264", "-preset", "ultrafast",
+                "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+                "-pix_fmt", "yuv420p",
+                output_clip_path
+            ]
+
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         if os.path.exists(srt_path):
             os.remove(srt_path)
 
         return output_clip_path
-
-    @classmethod
-    def render_presenter_clip(
-        cls,
-        audio_path: str,
-        subtitle_text: str,
-        output_clip_path: str,
-        template_type: str = "outro",
-        narration: Optional[str] = None,
-        width: int = 1920,
-        height: int = 1080
-    ) -> str:
-        """
-        Renders the 3D animated RBIQ female educator speaking the day's custom content.
-        """
-        t_name = "educator_intro" if template_type == "intro" else "educator_outro"
-        return cls.render_motion_clip(t_name, audio_path, subtitle_text, output_clip_path, narration=narration, width=width, height=height)
 
     @classmethod
     def render_image_audio_clip(
@@ -159,7 +155,7 @@ class VideoService:
 
         srt_filter_arg = srt_path.replace("\\", "/").replace(":", "\\:")
         vf_arg = (
-            f"scale=1920:1080,setsar=1,"
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
             f"subtitles='{srt_filter_arg}':force_style="
             f"'FontName=Arial,FontSize=16,Bold=0,PrimaryColour=&H00FFFFFF,BackColour=&HA00C1220,"
             f"BorderStyle=4,Outline=0,Shadow=0,MarginV=30,Alignment=2'"

@@ -26,11 +26,15 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
         ];
 
   const handleSceneChange = (index, field, value) => {
+    handleUpdateScene(index, { [field]: value });
+  };
+
+  const handleUpdateScene = (index, fields) => {
     const updated = [...scenes];
     if (updated[index]) {
       updated[index] = {
         ...updated[index],
-        [field]: value
+        ...fields
       };
       onChangeConfig({
         ...config,
@@ -92,8 +96,10 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
       });
       const data = await res.json();
       if (data.status === 'uploaded') {
-        handleSceneChange(index, 'image_path', data.local_path);
-        handleSceneChange(index, 'preview_url', data.preview_url);
+        handleUpdateScene(index, {
+          image_path: data.local_path,
+          preview_url: data.preview_url
+        });
       }
     } catch (err) {
       console.error('Error uploading image:', err);
@@ -104,8 +110,10 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
   };
 
   const handleRemoveImage = (index) => {
-    handleSceneChange(index, 'image_path', '');
-    handleSceneChange(index, 'preview_url', '');
+    handleUpdateScene(index, {
+      image_path: '',
+      preview_url: ''
+    });
   };
 
   const handleVoiceAudioUpload = async (file) => {
@@ -276,7 +284,7 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
                       value={scene.title || ''}
                       onChange={(e) => handleSceneChange(idx, 'title', e.target.value)}
                       placeholder={`Scene ${idx + 1} Title (e.g. Talking Lion)...`}
-                      className="text-xs font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-800 focus:outline-none px-1 py-0.5 transition w-56 sm:w-80"
+                      className="text-xs font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-800 focus:outline-none px-1 py-0.5 transition flex-1 max-w-md"
                     />
                   </div>
 

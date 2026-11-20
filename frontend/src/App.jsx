@@ -102,15 +102,15 @@ export default function App() {
         onOpenKlingModal={() => setIsKlingModalOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6">
+      <main className="flex-1 max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {loading ? (
           <div className="py-24 text-center text-slate-400 text-sm font-medium">
             Loading Studio...
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
             {/* Left 7 Columns: Blank Clean Inputs for Images and Prompts */}
-            <section className="lg:col-span-7">
+            <section className="lg:col-span-7 xl:col-span-7">
               <DirectorWorkspace
                 config={config}
                 onChangeConfig={setConfig}
@@ -121,7 +121,7 @@ export default function App() {
             </section>
 
             {/* Right 5 Columns: 1080p Video Player & Single Run Action */}
-            <section className="lg:col-span-5">
+            <section className="lg:col-span-5 xl:col-span-5">
               <ProductionMonitor
                 config={config}
               />
