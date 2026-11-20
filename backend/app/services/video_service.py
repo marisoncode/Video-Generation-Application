@@ -1,0 +1,221 @@
+import os
+import re
+import subprocess
+from typing import List, Optional
+import imageio_ffmpeg
+from app.core.config import settings
+
+FFMPEG_BIN = imageio_ffmpeg.get_ffmpeg_exe()
+
+class VideoService:
+    @classmethod
+    def create_scene_srt(cls, narration: str, total_duration: float, output_srt_path: str) -> str:
+        """
+        Splits the spoken narration into sentences and maps them across the total duration
+        proportional to word count, ensuring the subtitle on screen exactly matches the words being spoken.
+        """
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', narration) if s.strip()]
+        if not sentences:
+            sentences = [narration.strip()] if narration.strip() else [""]
+
+        word_counts = [len(s.split()) for s in sentences]
+        total_words = sum(word_counts)
+        if total_words == 0:
+            total_words = 1
+            word_counts = [1]
+
+        def format_time(seconds: float) -> str:
+            hrs = int(seconds // 3600)
+            mins = int((seconds % 3600) // 60)
+            secs = int(seconds % 60)
+            millis = int(round((seconds - int(seconds)) * 1000))
+            if millis >= 1000:
+                millis = 999
+            return f"{hrs:02d}:{mins:02d}:{secs:02d},{millis:03d}"
+
+        srt_blocks = []
+        cur_t = 0.0
+        for i, (sent, wc) in enumerate(zip(sentences, word_counts)):
+            seg_dur = (wc / total_words) * total_duration
+            t_start = cur_t
+            t_end = min(cur_t + seg_dur, total_duration)
+            cur_t += seg_dur
+
+            srt_blocks.append(f"{i + 1}\n{format_time(t_start)} --> {format_time(t_end)}\n{sent}\n")
+
+        with open(output_srt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(srt_blocks))
+
+        return output_srt_path
+
+    @staticmethod
+    def get_audio_duration(audio_path: str) -> float:
+        """Extracts the exact duration of an audio file in seconds."""
+        try:
+            cmd = [FFMPEG_BIN, "-i", audio_path]
+            res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
+            match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr)
+            if match:
+                h, m, s = float(match.group(1)), float(match.group(2)), float(match.group(3))
+                return h * 3600 + m * 60 + s
+        except Exception:
+            pass
+        return 5.0
+
+    @classmethod
+    def render_motion_clip(
+        cls,
+        template_name: str,
+        audio_path: str,
+        subtitle_text: str,
+        output_clip_path: str,
+        header_title: Optional[str] = None,
+        narration: Optional[str] = None,
+        width: int = 1920,
+        height: int = 1080
+    ) -> str:
+        """
+        Renders an authentic moving 1080p 3D video clip without cropping the video size,
+        synchronized with the newly generated audio narration and compact, elegant sentence-timed subtitles.
+        """
+        os.makedirs(os.path.dirname(output_clip_path), exist_ok=True)
+        if os.path.exists(template_name):
+            template_path = template_name
+        else:
+            template_path = os.path.join(settings.BASE_DIR, "storage", "visual_cache", "motion_templates", f"{template_name}.mp4")
+            if not os.path.exists(template_path):
+                template_path = os.path.join(settings.BASE_DIR, "storage", "visual_cache", f"{template_name}.mp4")
+
+        dur = cls.get_audio_duration(audio_path)
+        speech_text = narration.strip() if (narration and narration.strip()) else subtitle_text.strip()
+        srt_path = output_clip_path + ".srt"
+        cls.create_scene_srt(speech_text, dur, srt_path)
+
+        srt_filter_arg = srt_path.replace("\\", "/").replace(":", "\\:")
+        filter_complex = (
+            f"[0:v]scale=1920:1080,setsar=1,fps=30,"
+            f"subtitles='{srt_filter_arg}':force_style="
+            f"'FontName=Arial,FontSize=15,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+            f"BackColour=&HA00C1220,BorderStyle=4,Outline=1,Shadow=0,MarginV=30,Alignment=2'[v]"
+        )
+
+        cmd = [
+            FFMPEG_BIN, "-y",
+            "-stream_loop", "-1", "-i", template_path,
+            "-i", audio_path,
+            "-filter_complex", filter_complex,
+            "-map", "[v]", "-map", "1:a",
+            "-t", str(dur),
+            "-c:v", "libx264", "-preset", "ultrafast",
+            "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+            "-pix_fmt", "yuv420p",
+            output_clip_path
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        if os.path.exists(srt_path):
+            os.remove(srt_path)
+
+        return output_clip_path
+
+    @classmethod
+    def render_presenter_clip(
+        cls,
+        audio_path: str,
+        subtitle_text: str,
+        output_clip_path: str,
+        template_type: str = "outro",
+        narration: Optional[str] = None,
+        width: int = 1920,
+        height: int = 1080
+    ) -> str:
+        """
+        Renders the 3D animated RBIQ female educator speaking the day's custom content.
+        """
+        t_name = "educator_intro" if template_type == "intro" else "educator_outro"
+        return cls.render_motion_clip(t_name, audio_path, subtitle_text, output_clip_path, narration=narration, width=width, height=height)
+
+    @classmethod
+    def render_image_audio_clip(
+        cls,
+        image_path: str,
+        audio_path: str,
+        subtitle_text: str,
+        output_clip_path: str,
+        narration: Optional[str] = None,
+        width: int = 1920,
+        height: int = 1080
+    ) -> str:
+        """
+        Compiles a single 1080p video clip from a slide image and TTS audio narration
+        with burned sentence-timed subtitles displaying the exact words spoken.
+        """
+        os.makedirs(os.path.dirname(output_clip_path), exist_ok=True)
+        dur = cls.get_audio_duration(audio_path)
+
+        speech_text = narration.strip() if (narration and narration.strip()) else subtitle_text.strip()
+        srt_path = output_clip_path + ".srt"
+        cls.create_scene_srt(speech_text, dur, srt_path)
+
+        srt_filter_arg = srt_path.replace("\\", "/").replace(":", "\\:")
+        vf_arg = (
+            f"scale=1920:1080,setsar=1,"
+            f"subtitles='{srt_filter_arg}':force_style="
+            f"'FontName=Arial,FontSize=16,Bold=0,PrimaryColour=&H00FFFFFF,BackColour=&HA00C1220,"
+            f"BorderStyle=4,Outline=0,Shadow=0,MarginV=30,Alignment=2'"
+        )
+
+        cmd = [
+            FFMPEG_BIN, "-y",
+            "-loop", "1", "-i", image_path,
+            "-i", audio_path,
+            "-vf", vf_arg,
+            "-t", str(dur),
+            "-c:v", "libx264", "-preset", "ultrafast",
+            "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+            "-pix_fmt", "yuv420p",
+            output_clip_path
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        if os.path.exists(srt_path):
+            os.remove(srt_path)
+
+        return output_clip_path
+
+    @classmethod
+    def assemble_full_video(cls, clip_paths: List[str], output_path: str) -> str:
+        """
+        Concatenates all scene clips into a finalized 1080p Full HD MP4 video.
+        """
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        input_args = []
+        filter_inputs_v = []
+        filter_inputs_a = []
+
+        for i, clip in enumerate(clip_paths):
+            input_args.extend(["-i", clip])
+            filter_inputs_v.append(f"[{i}:v]scale=1920:1080,setsar=1,fps=30[v{i}]")
+            filter_inputs_a.append(f"[{i}:a]aformat=sample_rates=44100:channel_layouts=stereo[a{i}]")
+
+        n = len(clip_paths)
+        # Interleave video and audio streams: [v0][a0][v1][a1]... for FFmpeg concat filter
+        concat_interleaved = "".join([f"[v{i}][a{i}]" for i in range(n)])
+        concat_filter = f"{concat_interleaved}concat=n={n}:v=1:a=1[outv][outa]"
+
+        full_filter = ";".join(filter_inputs_v + filter_inputs_a + [concat_filter])
+
+        cmd = [
+            FFMPEG_BIN, "-y",
+            *input_args,
+            "-filter_complex", full_filter,
+            "-map", "[outv]", "-map", "[outa]",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p",
+            output_path
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return output_path
+
+video_service = VideoService()

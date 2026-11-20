@@ -1,0 +1,32 @@
+import os
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "AI Animated Explainer Video Generator"
+    API_V1_STR: str = "/api/v1"
+    
+    # Paths
+    PROJECT_ROOT: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    BASE_DIR: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    OUTPUTS_DIR: str = os.path.join(PROJECT_ROOT, "outputs")
+    TEMP_DIR: str = os.path.join(BASE_DIR, "temp")
+    STORAGE_DIR: str = os.path.join(BASE_DIR, "storage")
+    UPLOADS_DIR: str = os.path.join(BASE_DIR, "storage", "uploads")
+    
+    # Default Voice
+    DEFAULT_VOICE: str = "Reference Voice Clone (100% Match)"
+    
+    # Video Specifications
+    OUTPUT_WIDTH: int = 1920
+    OUTPUT_HEIGHT: int = 1080
+    OUTPUT_FPS: int = 30
+
+    class Config:
+        env_file = ".env"
+        extra = "allow"
+
+settings = Settings()
+
+os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
+os.makedirs(settings.TEMP_DIR, exist_ok=True)
+os.makedirs(settings.UPLOADS_DIR, exist_ok=True)

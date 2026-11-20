@@ -1,0 +1,101 @@
+# ==============================================================================
+# Environment & API Credentials (DO NOT COMMIT SECRETS)
+# ==============================================================================
+.env
+.env.*
+*.env
+backend/.env
+backend/.env.*
+!*.env.example
+
+# ==============================================================================
+# Python & Virtual Environments
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+
+# ==============================================================================
+# Node & Frontend Build Artifacts
+# ==============================================================================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ==============================================================================
+# Application Storage, Uploads & Temporary Renders
+# ==============================================================================
+# Generated final video outputs (preserve directory structure via .gitkeep)
+outputs/*
+!outputs/.gitkeep
+
+# Temporary build folders
+backend/temp/
+temp/
+*.tmp
+
+# Uploaded user media (preserve directory structure via .gitkeep)
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+
+# Cached Kling animated clips
+backend/storage/visual_cache/kling_clips/
+
+# Storyboard state
+backend/storage/project_input.json
+
+# Raw video and audio intermediate exports
+*.mp4
+*.wav
+*.mp3
+*.srt
+*.log
+
+# ==============================================================================
+# Operating System & IDE Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
