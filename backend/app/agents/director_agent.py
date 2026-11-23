@@ -31,6 +31,7 @@ class DirectorAgent:
         script_text: Optional[str] = None,
         file_bytes: Optional[bytes] = None,
         filename: Optional[str] = None,
+        live_url: Optional[str] = None,
         design_style: str = "pixar_3d",
         custom_character: Optional[str] = None,
         custom_environment: Optional[str] = None,
@@ -49,7 +50,8 @@ class DirectorAgent:
             topic_prompt=topic_prompt,
             script_text=script_text,
             file_bytes=file_bytes,
-            filename=filename
+            filename=filename,
+            live_url=live_url
         )
         raw_scenes = script_output["scenes"]
         project_title = script_output["title"]

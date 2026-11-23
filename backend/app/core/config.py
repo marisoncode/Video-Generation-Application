@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     STORAGE_DIR: str = os.path.join(BASE_DIR, "storage")
     UPLOADS_DIR: str = os.path.join(BASE_DIR, "storage", "uploads")
     
+    # API Keys (Loaded securely from .env or environment variables)
+    GROQ_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    REPLICATE_API_TOKEN: str = ""
+
     # Default Voice
     DEFAULT_VOICE: str = "Reference Voice Clone (100% Match)"
     

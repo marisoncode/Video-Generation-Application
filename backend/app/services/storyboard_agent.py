@@ -15,9 +15,8 @@ class StoryboardAgent:
     """
 
     DEFAULT_CHARACTER_ANCHOR = (
-        "3D Pixar style character, cute friendly teacher Leo with expressive brown eyes and warm smile, "
-        "wearing a stylish navy blue vest and rolled-up sleeves, Disney Pixar animated film aesthetic, "
-        "vibrant cinematic studio lighting, Octane render 8K, highly detailed"
+        "3D Disney Pixar animated character with warm expressive eyes and engaging smile, "
+        "Disney Pixar animated film aesthetic, vibrant cinematic lighting, Octane render 8K, highly detailed"
     )
 
     @classmethod

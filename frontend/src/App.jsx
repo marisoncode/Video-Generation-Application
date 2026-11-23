@@ -15,32 +15,33 @@ export default function App() {
   });
 
   const [voices, setVoices] = useState([
-    { id: 'Reference Voice Clone (100% Match)', name: 'Reference Voice Clone (Cloned Voice)', locale: 'Warm Cloned Teacher' },
-    { id: 'en-IN-NeerjaNeural', name: 'Indian English (Neerja)', locale: 'Studio Indian English' },
-    { id: 'en-US-JennyNeural', name: 'Jenny (Natural Storyteller)', locale: 'US English Warm' },
-    { id: 'en-US-GuyNeural', name: 'Guy (Educational Lecturer)', locale: 'US English Clear' }
+    { id: 'Reference Voice Clone (100% Match)', name: 'Reference Voice Clone', locale: 'Natural Voice Clone' },
+    { id: 'en-IN-NeerjaNeural', name: 'Neerja', locale: 'Indian English Clear' },
+    { id: 'en-US-JennyNeural', name: 'Jenny', locale: 'US English Warm' },
+    { id: 'en-US-GuyNeural', name: 'Guy', locale: 'US English Clear' }
   ]);
   const [selectedVoice, setSelectedVoice] = useState('Reference Voice Clone (100% Match)');
 
   const [musicTracks, setMusicTracks] = useState([
-    { id: 'inspiring_educational', name: 'Inspiring Educational', description: 'Uplifting warm acoustic background' },
-    { id: 'gentle_lofi', name: 'Gentle Lofi Study', description: 'Smooth, relaxed ambient warmth' },
+    { id: 'inspiring_educational', name: 'Inspiring Acoustic', description: 'Uplifting warm acoustic background' },
+    { id: 'gentle_lofi', name: 'Gentle Lofi Atmosphere', description: 'Smooth, relaxed ambient warmth' },
     { id: 'playful_curiosity', name: 'Playful Curiosity', description: 'Bright, cheerful learning atmosphere' },
-    { id: 'none', name: 'No Background Music', description: 'Speech only' }
+    { id: 'none', name: 'No Soundtrack', description: 'Pure spoken voice only' }
   ]);
   const [selectedMusic, setSelectedMusic] = useState('inspiring_educational');
 
   const [designStyles, setDesignStyles] = useState([
-    { id: 'pixar_3d', name: '3D Pixar / Disney 3D' },
-    { id: 'cinematic_realistic', name: 'Cinematic Realistic Film' },
-    { id: 'anime_ghibli', name: 'Japanese Anime (Studio Ghibli)' },
-    { id: 'claymation', name: 'Claymation & Stop-Motion' },
-    { id: 'storybook_watercolor', name: 'Vintage Watercolor Storybook' },
-    { id: 'cyberpunk_scifi', name: 'Futuristic Sci-Fi & Cyberpunk' }
+    { id: 'pixar_3d', name: '3D Pixar Animation' },
+    { id: 'cinematic_realistic', name: 'Cinematic Realism' },
+    { id: 'anime_ghibli', name: 'Studio Ghibli Anime' },
+    { id: 'claymation', name: 'Claymation Stop-Motion' },
+    { id: 'storybook_watercolor', name: 'Vintage Watercolor' },
+    { id: 'cyberpunk_scifi', name: 'Futuristic Sci-Fi' }
   ]);
   const [selectedDesignStyle, setSelectedDesignStyle] = useState('pixar_3d');
 
   const [replicateConfigured, setReplicateConfigured] = useState(false);
+  const [groqConfigured, setGroqConfigured] = useState(false);
   const [isReplicateModalOpen, setIsReplicateModalOpen] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
   const [jobId, setJobId] = useState(null);
@@ -62,7 +63,7 @@ export default function App() {
       })
       .catch(err => console.error('Error loading config:', err));
 
-    // 2. Fetch voices from VoiceAgent
+    // 2. Fetch voices
     fetch('/api/v1/voices')
       .then(res => res.json())
       .then(data => {
@@ -70,7 +71,7 @@ export default function App() {
       })
       .catch(err => console.error('Error loading voices:', err));
 
-    // 3. Fetch music tracks from MusicAgent
+    // 3. Fetch music tracks
     fetch('/api/v1/studio/music-tracks')
       .then(res => res.json())
       .then(data => {
@@ -78,7 +79,7 @@ export default function App() {
       })
       .catch(err => console.error('Error loading music tracks:', err));
 
-    // 4. Fetch design styles from DesignAgent
+    // 4. Fetch design styles
     fetch('/api/v1/studio/design-styles')
       .then(res => res.json())
       .then(data => {
@@ -91,6 +92,12 @@ export default function App() {
       .then(res => res.json())
       .then(data => setReplicateConfigured(data.configured))
       .catch(err => console.error('Error loading Replicate status:', err));
+
+    // 6. Fetch Groq AI status
+    fetch('/api/v1/groq/status')
+      .then(res => res.json())
+      .then(data => setGroqConfigured(data.configured))
+      .catch(err => console.error('Error loading Groq status:', err));
   }, []);
 
   const handleVoiceSelect = (voiceId) => {
@@ -159,14 +166,15 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans">
       <Header
         replicateConfigured={replicateConfigured}
+        groqConfigured={groqConfigured}
         onOpenReplicateModal={() => setIsReplicateModalOpen(true)}
       />
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Step 1: Input Director & Multi-Agent Studio */}
+      <main className="flex-1 max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Step 1: Input Studio */}
         <StudioInputSection
           onStoryboardGenerated={handleStoryboardGenerated}
           voices={voices}
@@ -211,8 +219,8 @@ export default function App() {
         onConfigSaved={() => setReplicateConfigured(true)}
       />
 
-      <footer className="border-t border-slate-200 bg-white px-6 py-4 text-center text-xs text-slate-400 mt-12">
-        AI Explainer Video Studio • Multi-Agent Autonomous 1080p Production
+      <footer className="border-t border-slate-200/90 bg-white px-6 py-4 text-center text-xs text-slate-400 mt-12">
+        VideoStudio Motion • 1080p Cinematic Multi-Scene Production
       </footer>
     </div>
   );

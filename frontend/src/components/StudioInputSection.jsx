@@ -12,9 +12,14 @@ import {
   AlertCircle,
   Loader2,
   Play,
-  User,
+  Sliders,
+  Globe,
+  X,
+  FileSpreadsheet,
+  Film,
   Compass,
-  Sliders
+  User,
+  Info
 } from 'lucide-react';
 
 export default function StudioInputSection({
@@ -29,17 +34,18 @@ export default function StudioInputSection({
   selectedDesignStyle,
   onSelectDesignStyle
 }) {
-  const [activeTab, setActiveTab] = useState('pdf'); // 'pdf' | 'script' | 'prompt'
+  const [activeTab, setActiveTab] = useState('file'); // 'file' | 'google' | 'script' | 'prompt'
   const [topicPrompt, setTopicPrompt] = useState('');
   const [scriptText, setScriptText] = useState('');
+  const [googleUrl, setGoogleUrl] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
 
-  // Design Agent State
-  const [customCharacter, setCustomCharacter] = useState('Friendly teacher Leo with expressive warm smile, wearing navy blue vest');
-  const [customEnvironment, setCustomEnvironment] = useState('Modern colorful science classroom with glowing interactive holograms');
+  // Character & Environment Customizer
+  const [customCharacter, setCustomCharacter] = useState('');
+  const [customEnvironment, setCustomEnvironment] = useState('');
   const [showAdvancedDesign, setShowAdvancedDesign] = useState(false);
 
-  // Voice Agent Reference Audio State
+  // Reference Audio State
   const [referenceAudioFile, setReferenceAudioFile] = useState(null);
   const [referenceAudioUrl, setReferenceAudioUrl] = useState(null);
   const [referenceAudioName, setReferenceAudioName] = useState(null);
@@ -47,14 +53,14 @@ export default function StudioInputSection({
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
-  const [currentAgentNotice, setCurrentAgentNotice] = useState('');
+  const [currentNotice, setCurrentNotice] = useState('');
   const [errorMsg, setErrorMsg] = useState(null);
 
   const samplePrompts = [
-    'Photosynthesis for Grade 5 with 3D Pixar Animation',
-    'How Solar Panels Turn Sunlight into Electricity',
-    'Journey Inside the Human Cell & DNA',
-    'The Water Cycle & Cloud Formation'
+    { label: 'Baby Sensory Play', prompt: 'Baby mirror sensory play with smiles, pineapple smell, and hand clapping' },
+    { label: 'Science / Gravity', prompt: 'A physicist demonstrating planetary gravity and orbits in space' },
+    { label: 'Nature / Botany', prompt: 'How green plant leaves turn sunlight into food through photosynthesis' },
+    { label: 'Character Story', prompt: 'A cheerful chef baking a chocolate cake in a sunny rustic kitchen' }
   ];
 
   const handleDocFileChange = (e) => {
@@ -100,40 +106,49 @@ export default function StudioInputSection({
     setErrorMsg(null);
 
     // Validation
-    if (activeTab === 'pdf' && !uploadedFile) {
-      setErrorMsg('Please select or upload a PDF or text file first.');
+    if (activeTab === 'file' && !uploadedFile) {
+      setErrorMsg('Please select or drag in a document file (PDF, Word, Excel, CSV, or Text).');
+      return;
+    }
+    if (activeTab === 'google' && !googleUrl.trim()) {
+      setErrorMsg('Please enter a valid Google Docs or Google Sheets share link.');
       return;
     }
     if (activeTab === 'script' && !scriptText.trim()) {
-      setErrorMsg('Please paste or write your script text first.');
+      setErrorMsg('Please write or paste your script content first.');
       return;
     }
     if (activeTab === 'prompt' && !topicPrompt.trim()) {
-      setErrorMsg('Please enter a topic prompt or choose one of the suggestions.');
+      setErrorMsg('Please enter a topic prompt or choose one of the ideas above.');
       return;
     }
 
     setIsGenerating(true);
-    setCurrentAgentNotice('📝 ScriptAgent: Parsing educational concepts & segmenting scenes...');
+    setCurrentNotice('Analyzing script content & structuring scene segments...');
 
     try {
       const formData = new FormData();
-      formData.append('input_mode', activeTab === 'pdf' ? 'document' : activeTab);
       formData.append('design_style', selectedDesignStyle || 'pixar_3d');
       formData.append('custom_character', customCharacter);
       formData.append('custom_environment', customEnvironment);
       formData.append('voice', selectedVoice || 'Reference Voice Clone (100% Match)');
       formData.append('background_music', selectedMusic || 'inspiring_educational');
 
-      if (activeTab === 'pdf' && uploadedFile) {
+      if (activeTab === 'file' && uploadedFile) {
+        formData.append('input_mode', 'document');
         formData.append('file', uploadedFile);
+      } else if (activeTab === 'google') {
+        formData.append('input_mode', 'google_url');
+        formData.append('live_url', googleUrl.trim());
       } else if (activeTab === 'script') {
+        formData.append('input_mode', 'script');
         formData.append('script_text', scriptText);
       } else {
+        formData.append('input_mode', 'prompt');
         formData.append('topic_prompt', topicPrompt);
       }
 
-      setCurrentAgentNotice('🎨 DesignAgent: Composing 16:9 visual prompts & aesthetic framing...');
+      setCurrentNotice('Designing cinematic 16:9 visual prompts & camera framing...');
 
       const response = await fetch('/api/v1/studio/create-storyboard', {
         method: 'POST',
@@ -145,7 +160,7 @@ export default function StudioInputSection({
         throw new Error(errData.detail || `Server error (${response.status})`);
       }
 
-      setCurrentAgentNotice('🖼️ ImageAgent: Rendering 16:9 images with FLUX AI...');
+      setCurrentNotice('Synthesizing initial keyframe renders...');
       const data = await response.json();
 
       if (data && data.scenes) {
@@ -155,99 +170,130 @@ export default function StudioInputSection({
       }
     } catch (err) {
       console.error('Storyboard generation error:', err);
-      setErrorMsg(err.message || 'Failed to generate storyboard. Please try again.');
+      setErrorMsg(err.message || 'Failed to generate storyboard. Please verify your file or input format.');
     } finally {
       setIsGenerating(false);
-      setCurrentAgentNotice('');
+      setCurrentNotice('');
     }
   };
 
+  const scriptWordCount = scriptText.trim() ? scriptText.trim().split(/\s+/).length : 0;
+  const estimatedSeconds = Math.round(scriptWordCount / 2.5);
+
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 mb-8 space-y-6">
-      {/* Studio Header & Agent Roster */}
+    <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_20px_-4px_rgba(0,0,0,0.03)] space-y-6">
+      {/* Studio Section Header */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-5 border-b border-slate-100">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
-            <h2 className="text-lg font-bold text-slate-900">
-              1. Multi-Agent Production Studio
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+              Step 01
+            </span>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              Script Ingestion & Storyboard Setup
             </h2>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Dedicated AI agents manage Scripting, Visual Design, Image Rendering, Voiceover, and Audio Ducking.
+          <p className="text-xs text-slate-500 mt-1">
+            Upload any document, spreadsheet, live Google link, or paste a script. The system automatically segments it into timed scenes.
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+        {/* Input Source Segmented Switcher */}
+        <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 text-xs font-semibold flex-wrap gap-1">
           <button
             type="button"
-            onClick={() => setActiveTab('pdf')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
-              activeTab === 'pdf'
-                ? 'bg-white text-indigo-700 shadow-sm'
+            onClick={() => setActiveTab('file')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition ${
+              activeTab === 'file'
+                ? 'bg-white text-indigo-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Upload PDF / Doc</span>
+            <Upload className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Upload File</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('google')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition ${
+              activeTab === 'google'
+                ? 'bg-white text-indigo-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5 text-sky-600" />
+            <span>Google Docs / Sheets</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('script')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition ${
               activeTab === 'script'
-                ? 'bg-white text-indigo-700 shadow-sm'
+                ? 'bg-white text-indigo-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <FileText className="w-3.5 h-3.5" />
+            <FileText className="w-3.5 h-3.5 text-slate-600" />
             <span>Paste Script</span>
           </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('prompt')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition ${
               activeTab === 'prompt'
-                ? 'bg-white text-indigo-700 shadow-sm'
+                ? 'bg-white text-indigo-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Topic / Prompt</span>
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>Topic Prompt</span>
           </button>
         </div>
       </div>
 
-      {/* Primary Input Tabs */}
+      {/* Primary Input Container */}
       <div>
-        {activeTab === 'pdf' && (
+        {/* TAB 1: File Upload (PDF, Word, Excel, CSV, TXT) */}
+        {activeTab === 'file' && (
           <div className="space-y-3">
-            <label className="block text-xs font-bold text-slate-700">
-              Upload Educational PDF or Script File (.pdf, .txt)
-            </label>
-            <div className="border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-slate-50 hover:bg-indigo-50/20 rounded-xl p-6 text-center transition cursor-pointer relative">
+            <div className="flex items-center justify-between text-xs">
+              <label className="font-bold text-slate-800">
+                Source Document or Spreadsheet File
+              </label>
+              <span className="text-slate-400 font-mono text-[11px]">
+                Supports PDF • Word (.docx) • Excel (.xlsx) • CSV • TXT
+              </span>
+            </div>
+
+            <div className="border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-slate-50/70 hover:bg-indigo-50/20 rounded-xl p-8 text-center transition cursor-pointer relative group">
               <input
                 type="file"
-                accept=".pdf,.txt"
+                accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.md"
                 onChange={handleDocFileChange}
                 className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
               />
-              <FileUp className="w-9 h-9 text-indigo-500 mx-auto mb-2" />
+              <FileUp className="w-10 h-10 text-indigo-600 mx-auto mb-2.5 group-hover:scale-105 transition-transform" />
+
               {uploadedFile ? (
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-slate-800">{uploadedFile.name}</p>
-                  <p className="text-xs text-slate-500">
-                    {(uploadedFile.size / 1024).toFixed(1)} KB — Click to replace
-                  </p>
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-200 px-3.5 py-1.5 rounded-lg text-indigo-900 text-xs font-semibold shadow-xs">
+                    <span>{uploadedFile.name}</span>
+                    <span className="text-[10px] text-indigo-600 font-mono">
+                      ({(uploadedFile.size / 1024).toFixed(1)} KB)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">Click or drag a new file to replace</p>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-700">
-                    Drag and drop your PDF syllabus, lecture notes, or script here
+                  <p className="text-xs font-semibold text-slate-800">
+                    Drag and drop your file here, or click to browse
                   </p>
-                  <p className="text-xs text-slate-400">
-                    ScriptAgent will automatically extract and segment it into timed scenes
+                  <p className="text-[11px] text-slate-500">
+                    Upload lesson plans, syllabus PDFs, spreadsheet row scripts, or text notes up to 25MB
                   </p>
                 </div>
               )}
@@ -255,49 +301,83 @@ export default function StudioInputSection({
           </div>
         )}
 
+        {/* TAB 2: Live Google Docs & Google Sheets Link */}
+        {activeTab === 'google' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <label className="font-bold text-slate-800 flex items-center gap-2">
+                <Globe className="w-3.5 h-3.5 text-sky-600" />
+                <span>Google Docs or Google Sheets URL</span>
+              </label>
+              <span className="text-[11px] font-mono text-emerald-600 font-semibold">
+                Direct Cloud Sync Supported
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <input
+                type="url"
+                value={googleUrl}
+                onChange={(e) => setGoogleUrl(e.target.value)}
+                placeholder="https://docs.google.com/document/d/... or https://docs.google.com/spreadsheets/d/..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition font-mono"
+              />
+              <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <span>Make sure sharing in Google Drive is set to <strong>"Anyone with the link can view"</strong> for direct syncing.</span>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: Paste Script */}
         {activeTab === 'script' && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700">
-                Paste Written Lecture, Dialogue, or Multi-Scene Script
+            <div className="flex items-center justify-between text-xs">
+              <label className="font-bold text-slate-800">
+                Spoken Narration Script or Story Transcript
               </label>
-              <span className="text-[11px] text-slate-400">
-                ScriptAgent detects Scene 1, Scene 2 or splits by paragraph
+              <span className="text-[11px] font-mono text-slate-500 font-medium">
+                {scriptWordCount} words {estimatedSeconds > 0 && `• ~${estimatedSeconds}s estimated speech`}
               </span>
             </div>
             <textarea
               rows={5}
               value={scriptText}
               onChange={(e) => setScriptText(e.target.value)}
-              placeholder="Paste your script here... For example:&#10;&#10;Scene 1: Introduction&#10;Hello everyone! Today we will discover how green plants produce energy through photosynthesis...&#10;&#10;Scene 2: Inside the Chloroplast&#10;Inside plant leaves, chloroplasts capture sunlight and convert water into glucose..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+              placeholder="Paste or write your full script here. You can format it into scenes (e.g., 'Scene 1: Introduction') or paste a continuous narrative, and the system will automatically break it down into clean video scenes..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition leading-relaxed font-mono"
             />
           </div>
         )}
 
+        {/* TAB 4: Topic Prompt */}
         {activeTab === 'prompt' && (
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700">
-                Educational Topic or Creative Idea
+              <label className="text-xs font-bold text-slate-800 block">
+                Video Topic, Idea, or Creative Narrative
               </label>
               <input
                 type="text"
                 value={topicPrompt}
                 onChange={(e) => setTopicPrompt(e.target.value)}
-                placeholder="e.g. Photosynthesis for grade 5 in 3D Pixar animation style with teacher Leo"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+                placeholder="e.g. Baby mirror sensory play, or A puppy walking in the park and barking, or How gravity works..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition"
               />
             </div>
-            <div className="flex flex-wrap gap-2">
-              {samplePrompts.map((p, idx) => (
+
+            {/* Quick Starter Chips */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-[11px] font-semibold text-slate-500 mr-1">Quick ideas:</span>
+              {samplePrompts.map((item, idx) => (
                 <button
                   key={idx}
                   type="button"
-                  onClick={() => setTopicPrompt(p)}
-                  className="text-[11px] bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200 transition text-left"
+                  onClick={() => setTopicPrompt(item.prompt)}
+                  className="text-[11px] bg-slate-100/80 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200 text-slate-700 px-3 py-1 rounded-lg transition"
                 >
-                  💡 {p}
+                  {item.label}
                 </button>
               ))}
             </div>
@@ -305,136 +385,150 @@ export default function StudioInputSection({
         )}
       </div>
 
-      {/* DESIGN INPUT SECTION (Managed by DesignAgent) */}
-      <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50/50 to-indigo-50/50 border border-purple-100 space-y-4">
+      {/* Visual Art Direction & Styles */}
+      <div className="space-y-3 pt-4 border-t border-slate-100">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Palette className="w-4 h-4 text-purple-600" />
+            <Palette className="w-4 h-4 text-indigo-600" />
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              🎨 Design Agent: Visual Art Style & Setting
+              Visual Art Style
             </h3>
           </div>
+
           <button
             type="button"
             onClick={() => setShowAdvancedDesign(!showAdvancedDesign)}
-            className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 flex items-center gap-1"
+            className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition"
           >
             <Sliders className="w-3 h-3" />
-            <span>{showAdvancedDesign ? 'Hide Design Details' : 'Customize Character & Setting'}</span>
+            <span>{showAdvancedDesign ? 'Hide Character & Setting' : 'Custom Character & Setting'}</span>
           </button>
         </div>
 
-        {/* Visual Style Preset Selector */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {/* Visual Style Selection Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           {[
-            { id: 'pixar_3d', name: '🌟 3D Pixar / Disney' },
-            { id: 'cinematic_realistic', name: '🎬 Cinematic Film' },
-            { id: 'anime_ghibli', name: '🎌 Anime (Ghibli)' },
-            { id: 'claymation', name: '🧸 Claymation 3D' },
-            { id: 'storybook_watercolor', name: '🖌️ Storybook Art' },
-            { id: 'cyberpunk_scifi', name: '🔮 Sci-Fi Cyberpunk' }
-          ].map((style) => (
-            <button
-              key={style.id}
-              type="button"
-              onClick={() => onSelectDesignStyle(style.id)}
-              className={`p-2.5 rounded-xl text-xs font-semibold border text-center transition ${
-                selectedDesignStyle === style.id
-                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                  : 'bg-white hover:bg-purple-50/50 text-slate-700 border-slate-200'
-              }`}
-            >
-              {style.name}
-            </button>
-          ))}
+            { id: 'pixar_3d', name: '3D Pixar Animation', tag: 'Vibrant 3D' },
+            { id: 'cinematic_realistic', name: 'Cinematic Realism', tag: '35mm Film' },
+            { id: 'anime_ghibli', name: 'Studio Ghibli Anime', tag: 'Hand-drawn' },
+            { id: 'claymation', name: 'Claymation Stop-Motion', tag: 'Tactile 3D' },
+            { id: 'storybook_watercolor', name: 'Vintage Watercolor', tag: 'Storybook' },
+            { id: 'cyberpunk_scifi', name: 'Futuristic Sci-Fi', tag: 'Volumetric' }
+          ].map((style) => {
+            const isSelected = selectedDesignStyle === style.id;
+            return (
+              <button
+                key={style.id}
+                type="button"
+                onClick={() => onSelectDesignStyle(style.id)}
+                className={`p-3 rounded-xl border text-left transition relative ${
+                  isSelected
+                    ? 'bg-indigo-50/70 border-indigo-600 text-indigo-950 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700 hover:bg-slate-50/50'
+                }`}
+              >
+                <div className="text-xs font-bold mb-0.5">{style.name}</div>
+                <div className="text-[10px] font-mono text-slate-400 font-medium">{style.tag}</div>
+                {isSelected && (
+                  <span className="w-2 h-2 rounded-full bg-indigo-600 absolute top-2.5 right-2.5"></span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Collapsible Advanced Character & Setting Customizer */}
+        {/* Collapsible Advanced Character & Environment Anchors */}
         {showAdvancedDesign && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-purple-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-4 bg-slate-50 border border-slate-200 rounded-xl animate-in fade-in duration-150">
             <div className="space-y-1">
-              <label className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
-                <User className="w-3 h-3 text-purple-600" />
-                <span>Character Design Anchor</span>
+              <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                <User className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Character Anchor (Optional)</span>
               </label>
               <input
                 type="text"
                 value={customCharacter}
                 onChange={(e) => setCustomCharacter(e.target.value)}
-                placeholder="e.g. Friendly teacher Leo with expressive warm smile, wearing navy vest"
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                placeholder="Auto-detected from script, or specify (e.g. Caring mother and cute baby, brave pirate)"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-600 transition"
               />
             </div>
             <div className="space-y-1">
-              <label className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
-                <Compass className="w-3 h-3 text-purple-600" />
-                <span>Visual Environment / Setting</span>
+              <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                <Compass className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Environment & Setting (Optional)</span>
               </label>
               <input
                 type="text"
                 value={customEnvironment}
                 onChange={(e) => setCustomEnvironment(e.target.value)}
-                placeholder="e.g. Modern colorful science classroom with glowing interactive holograms"
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                placeholder="Auto-detected from script, or specify (e.g. Warm sunlit nursery with floor mirror, island beach)"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-600 transition"
               />
             </div>
           </div>
         )}
       </div>
 
-      {/* VOICE AGENT & REFERENCE AUDIO SECTION */}
-      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Mic className="w-4 h-4 text-indigo-600" />
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              🎙️ Voice Agent: Voiceover & Reference Audio
-            </h3>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-          {/* Voice Selector */}
-          <div className="md:col-span-6 space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 block">
-              Select Voiceover Preset
-            </label>
-            <select
-              value={selectedVoice}
-              onChange={(e) => onSelectVoice(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {referenceAudioUrl && (
-                <option value={selectedVoice}>
-                  ⭐ {referenceAudioName ? `My Cloned Voice (${referenceAudioName})` : 'My Uploaded Reference Audio'}
-                </option>
-              )}
-              {voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} ({v.locale || 'Natural AI'})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Reference Audio Upload & Audio Player */}
-          <div className="md:col-span-6 space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
-              <span>Upload Reference Audio File (.mp3, .wav, .m4a)</span>
-              {referenceAudioUrl && <span className="text-emerald-600 font-bold">✓ Audio Loaded</span>}
-            </label>
-
+      {/* Voice & Soundtrack Controls */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-4 border-t border-slate-100">
+        {/* Voiceover Actor & Reference Clone */}
+        <div className="lg:col-span-7 bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-dashed border-indigo-300 hover:border-indigo-500 rounded-xl text-xs font-semibold text-indigo-700 cursor-pointer shadow-sm transition">
+              <Mic className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Voiceover Engine
+              </h3>
+            </div>
+            {referenceAudioUrl && (
+              <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Custom Reference Loaded
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+            {/* Voice Preset Dropdown */}
+            <div className="sm:col-span-7 space-y-1">
+              <label className="text-[11px] font-semibold text-slate-600 block">
+                Voice Actor Preset
+              </label>
+              <select
+                value={selectedVoice}
+                onChange={(e) => onSelectVoice(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-indigo-600 transition shadow-2xs"
+              >
+                {referenceAudioUrl && (
+                  <option value={selectedVoice}>
+                    ★ {referenceAudioName ? `Cloned Voice (${referenceAudioName})` : 'My Uploaded Voice'}
+                  </option>
+                )}
+                {voices.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.locale || 'Studio AI'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reference Voice File Upload Button */}
+            <div className="sm:col-span-5 space-y-1">
+              <label className="text-[11px] font-semibold text-slate-600 block">
+                Clone Your Own Voice (.mp3/.wav)
+              </label>
+              <label className="flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-dashed border-slate-300 hover:border-indigo-400 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer transition shadow-2xs">
                 {isUploadingAudio ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Processing Audio...</span>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                    <span>Processing...</span>
                   </>
                 ) : (
                   <>
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>{referenceAudioName ? 'Replace Audio File' : 'Upload Reference Audio'}</span>
+                    <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="truncate">
+                      {referenceAudioName ? 'Replace Voice File' : 'Upload Audio'}
+                    </span>
                   </>
                 )}
                 <input
@@ -445,65 +539,70 @@ export default function StudioInputSection({
                 />
               </label>
             </div>
+          </div>
 
-            {/* In-Browser Audio Player to Listen & Get Audio */}
-            {referenceAudioUrl && (
-              <div className="pt-2">
-                <audio
-                  controls
-                  src={referenceAudioUrl}
-                  className="w-full h-8 rounded-lg"
-                />
-              </div>
-            )}
+          {/* Audio Preview Player if loaded */}
+          {referenceAudioUrl && (
+            <div className="pt-1">
+              <audio
+                controls
+                src={referenceAudioUrl}
+                className="w-full h-8 rounded-lg"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Background Music Score */}
+        <div className="lg:col-span-5 bg-slate-50/70 border border-slate-200 rounded-xl p-4 flex flex-col justify-between space-y-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Music className="w-4 h-4 text-emerald-600" />
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Soundtrack & Audio Ducking
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Music automatically lowers by <strong>-14dB</strong> during speech so narration stays distinct and crystal clear.
+            </p>
+          </div>
+
+          <div>
+            <select
+              value={selectedMusic}
+              onChange={(e) => onSelectMusic(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-indigo-600 transition shadow-2xs"
+            >
+              {musicTracks.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} — {m.description}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
 
-      {/* MUSIC AGENT SECTION (Ducked background music) */}
-      <div className="p-4 rounded-xl bg-emerald-50/40 border border-emerald-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Music className="w-4 h-4 text-emerald-600" />
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              🎵 Music Agent: Royalty-Free Score & Audio Ducking
-            </h3>
-          </div>
-          <p className="text-[11px] text-slate-500">
-            Music automatically lowers (ducks) by -18dB whenever the voice speaks, keeping narration crystal clear.
-          </p>
-        </div>
-
-        <select
-          value={selectedMusic}
-          onChange={(e) => onSelectMusic(e.target.value)}
-          className="w-full sm:w-64 bg-white border border-emerald-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          {musicTracks.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} — {m.description}
-            </option>
-          ))}
-        </select>
-      </div>
-
+      {/* Error Notice */}
       {errorMsg && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-600" />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* Primary Action Button */}
-      <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="text-xs text-slate-500">
+      {/* Primary Action Button Bar */}
+      <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="text-xs text-slate-500 flex items-center gap-2">
           {isGenerating ? (
-            <span className="flex items-center gap-2 text-indigo-600 font-semibold">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {currentAgentNotice}
+            <span className="flex items-center gap-2 text-indigo-600 font-semibold animate-pulse">
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+              {currentNotice}
             </span>
           ) : (
-            <span>DirectorAgent coordinates all agents to draft your storyboard + FLUX images</span>
+            <span>
+              Generates structured scene cards, narration timings, and high-res keyframes for your review.
+            </span>
           )}
         </div>
 
@@ -511,21 +610,21 @@ export default function StudioInputSection({
           type="button"
           disabled={isGenerating}
           onClick={handleGenerateStoryboard}
-          className={`w-full sm:w-auto px-7 py-3.5 rounded-xl text-xs font-bold text-white transition flex items-center justify-center gap-2 shadow-md ${
+          className={`w-full sm:w-auto px-7 py-3 rounded-xl text-xs font-bold text-white transition flex items-center justify-center gap-2 shadow-sm ${
             isGenerating
-              ? 'bg-slate-400 cursor-not-allowed'
-              : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 shadow-indigo-200'
+              ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+              : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 shadow-indigo-200 hover:shadow-md'
           }`}
         >
           {isGenerating ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Agents Working...</span>
+              <span>Generating Storyboard...</span>
             </>
           ) : (
             <>
               <Sparkles className="w-4 h-4" />
-              <span>✨ Generate AI Storyboard & Images</span>
+              <span>Generate Storyboard & Keyframes</span>
             </>
           )}
         </button>

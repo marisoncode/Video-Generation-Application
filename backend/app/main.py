@@ -128,6 +128,19 @@ def get_music_tracks():
     """Returns available royalty-free background music tracks from MusicAgent."""
     return music_agent.get_tracks()
 
+# Groq AI Status (High-Speed LLM Storyboard Screenwriter)
+@app.get("/api/v1/groq/status")
+def get_groq_status():
+    """Returns Groq LLM status for scriptwriting."""
+    token = os.getenv("GROQ_API_KEY", "").strip() or getattr(settings, "GROQ_API_KEY", "").strip()
+    is_conf = bool(token and token.startswith("gsk_"))
+    masked = (token[:6] + "..." + token[-4:]) if len(token) > 10 else ("Configured" if is_conf else "")
+    return {
+        "configured": is_conf,
+        "token_preview": masked,
+        "model": "openai/gpt-oss-120b"
+    }
+
 # Replicate Status & Configuration
 @app.get("/api/v1/replicate/status")
 def get_replicate_status():
@@ -176,6 +189,7 @@ async def create_storyboard(
     input_mode: str = Form("prompt"),
     topic_prompt: Optional[str] = Form(None),
     script_text: Optional[str] = Form(None),
+    live_url: Optional[str] = Form(None),
     design_style: Optional[str] = Form("pixar_3d"),
     custom_character: Optional[str] = Form(None),
     custom_environment: Optional[str] = Form(None),
@@ -187,6 +201,7 @@ async def create_storyboard(
     """
     Autonomous Multi-Agent Creation:
     Orchestrated by DirectorAgent delegating to ScriptAgent, DesignAgent, and ImageAgent.
+    Supports PDF, DOCX, XLSX, CSV, live Google Docs, and live Google Sheets.
     """
     file_bytes = None
     filename = None
@@ -200,6 +215,7 @@ async def create_storyboard(
         script_text=script_text,
         file_bytes=file_bytes,
         filename=filename,
+        live_url=live_url,
         design_style=design_style or "pixar_3d",
         custom_character=custom_character,
         custom_environment=custom_environment,
