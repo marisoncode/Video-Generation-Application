@@ -1,84 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
-import DirectorWorkspace from './components/DirectorWorkspace';
+import StudioInputSection from './components/StudioInputSection';
+import ApprovalBoard from './components/ApprovalBoard';
 import ProductionMonitor from './components/ProductionMonitor';
-import KlingApiKeyModal from './components/KlingApiKeyModal';
-import DidApiKeyModal from './components/DidApiKeyModal';
+import ReplicateApiKeyModal from './components/ReplicateApiKeyModal';
 
 export default function App() {
   const [config, setConfig] = useState({
-    title: '',
+    title: 'New Video Project',
     voice: 'Reference Voice Clone (100% Match)',
-    scenes: [
-      {
-        scene_number: 1,
-        title: 'Scene 1',
-        image_path: '',
-        preview_url: '',
-        motion_prompt: '',
-        narration: '',
-        subtitle: ''
-      },
-      {
-        scene_number: 2,
-        title: 'Scene 2',
-        image_path: '',
-        preview_url: '',
-        motion_prompt: '',
-        narration: '',
-        subtitle: ''
-      },
-      {
-        scene_number: 3,
-        title: 'Scene 3',
-        image_path: '',
-        preview_url: '',
-        motion_prompt: '',
-        narration: '',
-        subtitle: ''
-      }
-    ]
+    background_music: 'inspiring_educational',
+    design_style: 'pixar_3d',
+    scenes: []
   });
 
   const [voices, setVoices] = useState([
-    { id: 'Reference Voice Clone (100% Match)', name: 'Reference Voice Clone (100% Match)' },
-    { id: 'en-IN-NeerjaNeural', name: 'Indian English (Neerja)' }
+    { id: 'Reference Voice Clone (100% Match)', name: 'Reference Voice Clone (Cloned Voice)', locale: 'Warm Cloned Teacher' },
+    { id: 'en-IN-NeerjaNeural', name: 'Indian English (Neerja)', locale: 'Studio Indian English' },
+    { id: 'en-US-JennyNeural', name: 'Jenny (Natural Storyteller)', locale: 'US English Warm' },
+    { id: 'en-US-GuyNeural', name: 'Guy (Educational Lecturer)', locale: 'US English Clear' }
   ]);
   const [selectedVoice, setSelectedVoice] = useState('Reference Voice Clone (100% Match)');
-  const [klingConfigured, setKlingConfigured] = useState(false);
-  const [didConfigured, setDidConfigured] = useState(false);
-  const [isKlingModalOpen, setIsKlingModalOpen] = useState(false);
-  const [isDidModalOpen, setIsDidModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+
+  const [musicTracks, setMusicTracks] = useState([
+    { id: 'inspiring_educational', name: 'Inspiring Educational', description: 'Uplifting warm acoustic background' },
+    { id: 'gentle_lofi', name: 'Gentle Lofi Study', description: 'Smooth, relaxed ambient warmth' },
+    { id: 'playful_curiosity', name: 'Playful Curiosity', description: 'Bright, cheerful learning atmosphere' },
+    { id: 'none', name: 'No Background Music', description: 'Speech only' }
+  ]);
+  const [selectedMusic, setSelectedMusic] = useState('inspiring_educational');
+
+  const [designStyles, setDesignStyles] = useState([
+    { id: 'pixar_3d', name: '3D Pixar / Disney 3D' },
+    { id: 'cinematic_realistic', name: 'Cinematic Realistic Film' },
+    { id: 'anime_ghibli', name: 'Japanese Anime (Studio Ghibli)' },
+    { id: 'claymation', name: 'Claymation & Stop-Motion' },
+    { id: 'storybook_watercolor', name: 'Vintage Watercolor Storybook' },
+    { id: 'cyberpunk_scifi', name: 'Futuristic Sci-Fi & Cyberpunk' }
+  ]);
+  const [selectedDesignStyle, setSelectedDesignStyle] = useState('pixar_3d');
+
+  const [replicateConfigured, setReplicateConfigured] = useState(false);
+  const [isReplicateModalOpen, setIsReplicateModalOpen] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
+  const [jobId, setJobId] = useState(null);
+
+  const approvalBoardRef = useRef(null);
+  const productionMonitorRef = useRef(null);
 
   useEffect(() => {
-    // Fetch custom config from backend
+    // 1. Fetch current saved config
     fetch('/api/v1/custom/config')
       .then(res => res.json())
       .then(data => {
-        if (data) {
-          const loadedScenes = (data.scenes && data.scenes.length > 0)
-            ? data.scenes
-            : (data.demonstration_scenes && data.demonstration_scenes.length > 0)
-              ? data.demonstration_scenes
-              : null;
-
-          if (loadedScenes) {
-            setConfig(prev => ({
-              ...prev,
-              title: data.title || '',
-              voice: data.voice || prev.voice,
-              custom_voice_name: data.custom_voice_name || '',
-              custom_voice_preview: data.custom_voice_preview || '',
-              scenes: loadedScenes
-            }));
-          }
+        if (data && data.scenes && data.scenes.length > 0) {
+          setConfig(data);
           if (data.voice) setSelectedVoice(data.voice);
+          if (data.background_music) setSelectedMusic(data.background_music);
+          if (data.design_style) setSelectedDesignStyle(data.design_style);
         }
       })
       .catch(err => console.error('Error loading config:', err));
 
-    // Fetch voices
+    // 2. Fetch voices from VoiceAgent
     fetch('/api/v1/voices')
       .then(res => res.json())
       .then(data => {
@@ -86,17 +70,27 @@ export default function App() {
       })
       .catch(err => console.error('Error loading voices:', err));
 
-    // Fetch Kling status
-    fetch('/api/v1/kling/status')
+    // 3. Fetch music tracks from MusicAgent
+    fetch('/api/v1/studio/music-tracks')
       .then(res => res.json())
-      .then(data => setKlingConfigured(data.configured))
-      .catch(err => console.error('Error loading Kling status:', err));
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) setMusicTracks(data);
+      })
+      .catch(err => console.error('Error loading music tracks:', err));
 
-    // Fetch D-ID status
-    fetch('/api/v1/did/status')
+    // 4. Fetch design styles from DesignAgent
+    fetch('/api/v1/studio/design-styles')
       .then(res => res.json())
-      .then(data => setDidConfigured(data.configured))
-      .catch(err => console.error('Error loading D-ID status:', err));
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) setDesignStyles(data);
+      })
+      .catch(err => console.error('Error loading design styles:', err));
+
+    // 5. Fetch Replicate status
+    fetch('/api/v1/replicate/status')
+      .then(res => res.json())
+      .then(data => setReplicateConfigured(data.configured))
+      .catch(err => console.error('Error loading Replicate status:', err));
   }, []);
 
   const handleVoiceSelect = (voiceId) => {
@@ -104,59 +98,121 @@ export default function App() {
     setConfig(prev => ({ ...prev, voice: voiceId }));
   };
 
+  const handleMusicSelect = (musicId) => {
+    setSelectedMusic(musicId);
+    setConfig(prev => ({ ...prev, background_music: musicId }));
+  };
+
+  const handleDesignStyleSelect = (styleId) => {
+    setSelectedDesignStyle(styleId);
+    setConfig(prev => ({ ...prev, design_style: styleId }));
+  };
+
+  const handleStoryboardGenerated = (newStoryboardData) => {
+    setConfig(newStoryboardData);
+    if (newStoryboardData.voice) setSelectedVoice(newStoryboardData.voice);
+    if (newStoryboardData.background_music) setSelectedMusic(newStoryboardData.background_music);
+    if (newStoryboardData.design_style) setSelectedDesignStyle(newStoryboardData.design_style);
+
+    // Scroll smoothly to approval board
+    setTimeout(() => {
+      if (approvalBoardRef.current) {
+        approvalBoardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
+  };
+
+  const handleApproveAndRender = async () => {
+    setIsRendering(true);
+
+    try {
+      // 1. Persist config
+      await fetch('/api/v1/custom/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+
+      // 2. Trigger generation
+      const res = await fetch('/api/v1/custom/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+
+      if (!res.ok) throw new Error('Failed to start video rendering job');
+
+      const data = await res.json();
+      setJobId(data.job_id);
+
+      // Scroll to video monitor
+      setTimeout(() => {
+        if (productionMonitorRef.current) {
+          productionMonitorRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 200);
+    } catch (err) {
+      console.error('Error starting video production:', err);
+      alert(`Could not start video generation: ${err.message}`);
+      setIsRendering(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       <Header
-        klingConfigured={klingConfigured}
-        onOpenKlingModal={() => setIsKlingModalOpen(true)}
-        didConfigured={didConfigured}
-        onOpenDidModal={() => setIsDidModalOpen(true)}
+        replicateConfigured={replicateConfigured}
+        onOpenReplicateModal={() => setIsReplicateModalOpen(true)}
       />
 
-      <main className="flex-1 max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {loading ? (
-          <div className="py-24 text-center text-slate-400 text-sm font-medium">
-            Loading Studio...
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
-            {/* Left 7 Columns: Blank Clean Inputs for Images and Prompts */}
-            <section className="lg:col-span-7 xl:col-span-7">
-              <DirectorWorkspace
-                config={config}
-                onChangeConfig={setConfig}
-                voices={voices}
-                selectedVoice={selectedVoice}
-                onSelectVoice={handleVoiceSelect}
-                klingConfigured={klingConfigured}
-                didConfigured={didConfigured}
-              />
-            </section>
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Step 1: Input Director & Multi-Agent Studio */}
+        <StudioInputSection
+          onStoryboardGenerated={handleStoryboardGenerated}
+          voices={voices}
+          selectedVoice={selectedVoice}
+          onSelectVoice={handleVoiceSelect}
+          musicTracks={musicTracks}
+          selectedMusic={selectedMusic}
+          onSelectMusic={handleMusicSelect}
+          designStyles={designStyles}
+          selectedDesignStyle={selectedDesignStyle}
+          onSelectDesignStyle={handleDesignStyleSelect}
+        />
 
-            {/* Right 5 Columns: 1080p Video Player & Single Run Action */}
-            <section className="lg:col-span-5 xl:col-span-5">
-              <ProductionMonitor
-                config={config}
-              />
-            </section>
-          </div>
-        )}
+        {/* 2-Column Section: Left = Approval Board, Right = Production Monitor / 1080p Player */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left 7-8 Columns: Interactive Approval Board */}
+          <section ref={approvalBoardRef} className="lg:col-span-7 xl:col-span-8">
+            <ApprovalBoard
+              config={config}
+              onChangeConfig={setConfig}
+              onApproveAndRender={handleApproveAndRender}
+              isRendering={isRendering}
+              musicTracks={musicTracks}
+              voices={voices}
+            />
+          </section>
+
+          {/* Right 4-5 Columns: Sticky 1080p Video Player & Production Progress */}
+          <section ref={productionMonitorRef} className="lg:col-span-5 xl:col-span-4 sticky top-20">
+            <ProductionMonitor
+              config={config}
+              externalJobId={jobId}
+              onRenderingFinished={() => setIsRendering(false)}
+            />
+          </section>
+        </div>
       </main>
 
-      <KlingApiKeyModal
-        isOpen={isKlingModalOpen}
-        onClose={() => setIsKlingModalOpen(false)}
-        onConfigSaved={() => setKlingConfigured(true)}
+      <ReplicateApiKeyModal
+        isOpen={isReplicateModalOpen}
+        onClose={() => setIsReplicateModalOpen(false)}
+        onConfigSaved={() => setReplicateConfigured(true)}
       />
 
-      <DidApiKeyModal
-        isOpen={isDidModalOpen}
-        onClose={() => setIsDidModalOpen(false)}
-        onConfigSaved={() => setDidConfigured(true)}
-      />
-
-      <footer className="border-t border-slate-200 bg-white px-6 py-4 text-center text-xs text-slate-400">
-        AI Explainer Video Studio
+      <footer className="border-t border-slate-200 bg-white px-6 py-4 text-center text-xs text-slate-400 mt-12">
+        AI Explainer Video Studio • Multi-Agent Autonomous 1080p Production
       </footer>
     </div>
   );

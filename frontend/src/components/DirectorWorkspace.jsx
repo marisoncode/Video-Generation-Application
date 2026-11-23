@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Image as ImageIcon, Sparkles, Film, Mic, X, CheckCircle2, Music, Plus, Trash2 } from 'lucide-react';
 
-export default function DirectorWorkspace({ config, onChangeConfig, voices, selectedVoice, onSelectVoice, klingConfigured, didConfigured }) {
+export default function DirectorWorkspace({ config, onChangeConfig, voices, selectedVoice, onSelectVoice, replicateConfigured }) {
   const [uploadingIdx, setUploadingIdx] = useState(null);
   const [uploadingVoice, setUploadingVoice] = useState(false);
   const [customVoiceName, setCustomVoiceName] = useState(config.custom_voice_name || '');
@@ -290,17 +290,13 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {klingConfigured ? (
-                      <span className="text-[11px] bg-purple-50 text-purple-700 font-semibold px-2 py-0.5 rounded-md border border-purple-200 hidden sm:inline-block">
-                        ✨ Kling AI Video
-                      </span>
-                    ) : didConfigured ? (
-                      <span className="text-[11px] bg-blue-50 text-blue-700 font-semibold px-2 py-0.5 rounded-md border border-blue-200 hidden sm:inline-block">
-                        🎭 D-ID Facial Expressions Active
+                    {replicateConfigured ? (
+                      <span className="text-[11px] bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-0.5 rounded-full border border-indigo-200 hidden sm:inline-block">
+                        ✨ Replicate AI Character Motion
                       </span>
                     ) : (
-                      <span className="text-[11px] bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-md border border-emerald-200 hidden sm:inline-block">
-                        ⚡ Free Dynamic Motion ($0)
+                      <span className="text-[11px] bg-slate-100 text-slate-700 font-semibold px-2.5 py-0.5 rounded-full border border-slate-200 hidden sm:inline-block">
+                        ⚡ 1080p Camera Motion Engine
                       </span>
                     )}
                     {scenes.length > 1 && (
@@ -387,17 +383,17 @@ export default function DirectorWorkspace({ config, onChangeConfig, voices, sele
                       </select>
                     </div>
 
-                    {/* Kling Motion Prompt */}
+                    {/* Replicate Motion Prompt */}
                     <div>
-                      <label className="text-[11px] font-bold text-purple-900 block mb-1">
-                        Kling AI Motion Prompt (Used when Kling Key is connected):
+                      <label className="text-[11px] font-bold text-indigo-900 block mb-1">
+                        Replicate AI Motion Prompt (Character motion, expressions & blinking):
                       </label>
                       <textarea
                         rows={2}
                         value={scene.motion_prompt || ''}
                         onChange={(e) => handleSceneChange(idx, 'motion_prompt', e.target.value)}
-                        placeholder="Describe character motion, camera moves, and expressions (e.g. Lion roars gently and smiles, camera pushes in)..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-purple-600 focus:bg-white transition leading-relaxed placeholder:text-slate-400 font-sans"
+                        placeholder="Describe character motion, camera moves, and expressions (e.g. Pixar teacher smiling, blinking naturally, looking at camera)..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 focus:bg-white transition leading-relaxed placeholder:text-slate-400 font-sans"
                       />
                     </div>
 

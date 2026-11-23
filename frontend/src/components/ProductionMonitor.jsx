@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Loader2, CheckCircle, AlertCircle, Film, Sparkles, Video } from 'lucide-react';
 
-export default function ProductionMonitor({ config, onStartJob }) {
-  const [jobId, setJobId] = useState(null);
+export default function ProductionMonitor({ config, externalJobId, onRenderingFinished }) {
+  const [jobId, setJobId] = useState(externalJobId || null);
   const [jobStatus, setJobStatus] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [outputVideoUrl, setOutputVideoUrl] = useState(null);
+
+  useEffect(() => {
+    if (externalJobId) {
+      setJobId(externalJobId);
+      setGenerating(true);
+      setJobStatus({ status: 'PROCESSING', progress_pct: 10, step_message: 'Starting 1080p video production...' });
+      setOutputVideoUrl(null);
+    }
+  }, [externalJobId]);
 
   const startCustomGeneration = async () => {
     setGenerating(true);
@@ -26,10 +35,10 @@ export default function ProductionMonitor({ config, onStartJob }) {
       });
       const data = await res.json();
       setJobId(data.job_id);
-      if (onStartJob) onStartJob(data.job_id);
     } catch (err) {
       setGenerating(false);
       setJobStatus({ status: 'FAILED', error: err.message });
+      if (onRenderingFinished) onRenderingFinished();
     }
   };
 
@@ -45,9 +54,11 @@ export default function ProductionMonitor({ config, onStartJob }) {
         if (data.status === 'COMPLETED') {
           setGenerating(false);
           setOutputVideoUrl(data.download_url);
+          if (onRenderingFinished) onRenderingFinished();
           clearInterval(interval);
         } else if (data.status === 'FAILED') {
           setGenerating(false);
+          if (onRenderingFinished) onRenderingFinished();
           clearInterval(interval);
         }
       } catch (err) {
@@ -56,15 +67,17 @@ export default function ProductionMonitor({ config, onStartJob }) {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [jobId, generating]);
+  }, [jobId, generating, onRenderingFinished]);
+
+  const scenesCount = config?.scenes?.length || 1;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-5 sticky top-24">
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-5">
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Film className="w-4 h-4 text-slate-800" />
-            <h2 className="text-sm font-bold text-slate-900">Video Preview</h2>
+            <h2 className="text-sm font-bold text-slate-900">3. Video Production & 1080p Player</h2>
           </div>
           <span className="text-[11px] bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full font-semibold">
             1080p Full HD
@@ -104,7 +117,7 @@ export default function ProductionMonitor({ config, onStartJob }) {
                 <Video className="w-6 h-6 text-slate-400" />
               </div>
               <span className="text-xs font-medium text-slate-300 block">
-                Preview will appear here
+                Final 1080p video will preview here
               </span>
             </div>
           )}
@@ -115,7 +128,7 @@ export default function ProductionMonitor({ config, onStartJob }) {
           <div className="mt-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900 shadow-sm">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="font-semibold">Video Ready!</span>
+              <span className="font-semibold">Video Rendered!</span>
             </div>
             <a
               href={outputVideoUrl}
@@ -136,40 +149,30 @@ export default function ProductionMonitor({ config, onStartJob }) {
         )}
       </div>
 
-      {/* Main Single Action Button */}
-      {(() => {
-        const scenesCount = (config?.scenes && config.scenes.length > 0)
-          ? config.scenes.length
-          : (config?.demonstration_scenes && config.demonstration_scenes.length > 0)
-            ? config.demonstration_scenes.length
-            : 1;
-
-        return (
-          <div className="pt-2 border-t border-slate-100">
-            <button
-              onClick={startCustomGeneration}
-              disabled={generating}
-              className={`w-full py-3.5 px-5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                generating
-                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                  : 'bg-slate-900 hover:bg-black text-white shadow-md active:scale-[0.99] cursor-pointer'
-              }`}
-            >
-              {generating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Generating Video ({jobStatus?.progress_pct || 0}%)...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 text-yellow-400" />
-                  <span>Generate Video ({scenesCount} {scenesCount === 1 ? 'Scene' : 'Scenes'})</span>
-                </>
-              )}
-            </button>
-          </div>
-        );
-      })()}
+      {/* Manual Quick Render Button */}
+      <div className="pt-2 border-t border-slate-100">
+        <button
+          onClick={startCustomGeneration}
+          disabled={generating || scenesCount === 0}
+          className={`w-full py-3 px-5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+            generating
+              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+              : 'bg-slate-900 hover:bg-black text-white shadow-md active:scale-[0.99] cursor-pointer'
+          }`}
+        >
+          {generating ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Rendering Video ({jobStatus?.progress_pct || 0}%)...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4 text-yellow-400" />
+              <span>Direct Render ({scenesCount} {scenesCount === 1 ? 'Scene' : 'Scenes'})</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }

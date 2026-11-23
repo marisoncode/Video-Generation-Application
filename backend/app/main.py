@@ -3,8 +3,7 @@ import json
 import re
 import time
 import subprocess
-import imageio_ffmpeg
-from fastapi import FastAPI, BackgroundTasks, HTTPException, UploadFile, File
+from fastapi import FastAPI, BackgroundTasks, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -13,13 +12,21 @@ from typing import Optional, Dict, Any, List
 
 from app.core.config import settings
 from app.services.pipeline_service import pipeline_service
-from app.services.kling_service import kling_service
-from app.services.did_service import did_service
+from app.services.replicate_service import replicate_service
+from app.agents import (
+    script_agent,
+    design_agent,
+    image_agent,
+    voice_agent,
+    music_agent,
+    video_agent,
+    director_agent
+)
 
 app = FastAPI(
     title="AI Animated Explainer Video Studio",
-    description="Full-stack AI studio to generate 1080p educational explainer videos.",
-    version="1.0.0"
+    description="Multi-Agent AI Studio for 1080p Explainer Video Production",
+    version="2.1.0"
 )
 
 app.add_middleware(
@@ -31,101 +38,111 @@ app.add_middleware(
 )
 
 PROJECT_INPUT_JSON = os.path.join(settings.STORAGE_DIR, "project_input.json")
+MUSIC_DIR = os.path.join(settings.STORAGE_DIR, "music")
+os.makedirs(MUSIC_DIR, exist_ok=True)
 
 # Static mounts
 app.mount("/static/outputs", StaticFiles(directory=settings.OUTPUTS_DIR), name="outputs")
 app.mount("/static/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
+app.mount("/static/music", StaticFiles(directory=MUSIC_DIR), name="music")
+
+@app.on_event("startup")
+def cleanup_obsolete_files():
+    """Removes deprecated files from disk on startup."""
+    obsolete = [
+        os.path.join(settings.BASE_DIR, "app", "services", "kling_service.py"),
+        os.path.join(settings.BASE_DIR, "app", "services", "free_motion_service.py"),
+        os.path.join(settings.BASE_DIR, "app", "services", "did_service.py"),
+        os.path.join(settings.PROJECT_ROOT, "frontend", "src", "components", "KlingApiKeyModal.jsx"),
+        os.path.join(settings.PROJECT_ROOT, "frontend", "src", "components", "DidApiKeyModal.jsx"),
+    ]
+    for p in obsolete:
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+                print(f"[Cleanup] Removed obsolete file: {os.path.basename(p)}")
+        except Exception:
+            pass
 
 # Schemas
-class KlingConfigPayload(BaseModel):
-    api_key: Optional[str] = None
-    access_key: Optional[str] = None
-    secret_key: Optional[str] = None
+class ReplicateConfigPayload(BaseModel):
+    api_token: str
 
-class DidConfigPayload(BaseModel):
-    api_key: str
+class RegenerateImagePayload(BaseModel):
+    scene_index: int
+    image_prompt: str
 
 class CustomVideoPayload(BaseModel):
     title: Optional[str] = ""
     voice: Optional[str] = "Reference Voice Clone (100% Match)"
+    background_music: Optional[str] = "inspiring_educational"
+    design_style: Optional[str] = "pixar_3d"
     scenes: Optional[List[Dict[str, Any]]] = []
     demonstration_scenes: Optional[List[Dict[str, Any]]] = None
 
-# Endpoints
+# Root
 @app.get("/")
 def read_root():
     return {
         "status": "online",
         "service": "AI Animated Explainer Video Studio",
-        "version": "1.0.0"
+        "agents": [
+            "ScriptAgent",
+            "DesignAgent",
+            "ImageAgent",
+            "VoiceAgent",
+            "MusicAgent",
+            "VideoAgent",
+            "DirectorAgent"
+        ],
+        "version": "2.1.0"
     }
 
+# Voices
 @app.get("/api/v1/voices")
 def get_voices():
-    """Returns only the two core, high-quality educator voices."""
-    return [
-        {
-            "id": "Reference Voice Clone (100% Match)",
-            "name": "Reference Voice Clone (100% Match)",
-            "locale": "Warm Cloned Teacher",
-            "gender": "Female"
-        },
-        {
-            "id": "en-IN-NeerjaNeural",
-            "name": "Indian English (Neerja)",
-            "locale": "Studio Indian English",
-            "gender": "Female"
-        }
-    ]
+    """Returns catalog of educator voices from VoiceAgent."""
+    return voice_agent.get_available_voices()
 
-@app.get("/api/v1/did/status")
-def get_did_status():
-    """Returns whether D-ID credentials are configured."""
-    is_conf = did_service.is_configured()
-    ak = os.getenv("DID_API_KEY", "").strip()
-    masked = (ak[:6] + "..." + ak[-4:]) if len(ak) > 10 else ("Configured" if is_conf else "")
+# Reference Audio File Upload & In-Browser Audio Retrieval
+@app.post("/api/v1/studio/upload-reference-audio")
+async def upload_reference_audio(file: UploadFile = File(...)):
+    """
+    Uploads user reference voice audio (.wav, .mp3, .m4a), normalizes it to 24kHz WAV,
+    and returns public audio preview URL for in-browser playback and cloning.
+    """
+    file_bytes = await file.read()
+    filename = file.filename or "reference_voice.wav"
+    result = voice_agent.save_and_normalize_reference_audio(file_bytes, filename)
+    return result
+
+# Visual Design Styles
+@app.get("/api/v1/studio/design-styles")
+def get_design_styles():
+    """Returns available visual design styles from DesignAgent."""
+    return design_agent.get_available_styles()
+
+# Background Music
+@app.get("/api/v1/studio/music-tracks")
+def get_music_tracks():
+    """Returns available royalty-free background music tracks from MusicAgent."""
+    return music_agent.get_tracks()
+
+# Replicate Status & Configuration
+@app.get("/api/v1/replicate/status")
+def get_replicate_status():
+    """Returns whether Replicate credentials are configured."""
+    is_conf = replicate_service.is_configured()
+    token = os.getenv("REPLICATE_API_TOKEN", "").strip()
+    masked = (token[:6] + "..." + token[-4:]) if len(token) > 10 else ("Configured" if is_conf else "")
     return {
         "configured": is_conf,
-        "api_key_preview": masked
+        "token_preview": masked
     }
 
-@app.post("/api/v1/did/config")
-def update_did_config(payload: DidConfigPayload):
-    """Saves D-ID API credentials into environment and .env file."""
-    clean_key = payload.api_key.strip()
-    os.environ["DID_API_KEY"] = clean_key
-    did_service.api_key = clean_key
-
-    env_file = os.path.join(settings.BASE_DIR, ".env")
-    if os.path.exists(env_file):
-        try:
-            with open(env_file, "r", encoding="utf-8") as f:
-                content = f.read()
-            if "DID_API_KEY=" in content:
-                content = re.sub(r'DID_API_KEY=.*', f'DID_API_KEY={clean_key}', content)
-            else:
-                content += f"\nDID_API_KEY={clean_key}\n"
-            with open(env_file, "w", encoding="utf-8") as f:
-                f.write(content)
-        except Exception as e:
-            print(f"Error persisting .env for D-ID: {e}")
-
-    return {"status": "ok", "configured": did_service.is_configured()}
-
-@app.get("/api/v1/kling/status")
-def get_kling_status():
-    """Returns whether Kling credentials are configured."""
-    is_conf = kling_service.is_configured()
-    ak = os.getenv("KLING_API_KEY", "").strip() or os.getenv("KLING_ACCESS_KEY", "").strip()
-    masked = (ak[:6] + "..." + ak[-4:]) if len(ak) > 10 else ("Configured" if is_conf else "")
-    return {
-        "configured": is_conf,
-        "access_key_preview": masked
-    }
-
-@app.post("/api/v1/kling/config")
-def update_kling_config(payload: KlingConfigPayload):
-    """Saves Kling API credentials into environment and .env file."""
+@app.post("/api/v1/replicate/config")
+def update_replicate_config(payload: ReplicateConfigPayload):
+    """Saves Replicate API token into environment and .env file."""
     env_file = os.path.join(settings.BASE_DIR, ".env")
     env_content = ""
     if os.path.exists(env_file):
@@ -135,39 +152,83 @@ def update_kling_config(payload: KlingConfigPayload):
         except Exception:
             pass
 
-    if payload.api_key:
-        k = payload.api_key.strip()
-        if "..." in k or "***" in k:
-            return {"status": "error", "message": "Masked key cannot be saved. Please paste your full unmasked key.", "configured": kling_service.is_configured()}
-        os.environ["KLING_API_KEY"] = k
-        kling_service.api_key = k
-        if "KLING_API_KEY=" in env_content:
-            env_content = re.sub(r'KLING_API_KEY=.*', f'KLING_API_KEY={k}', env_content)
+    t = payload.api_token.strip()
+    if "..." not in t and "***" not in t and t.startswith("r8_"):
+        os.environ["REPLICATE_API_TOKEN"] = t
+        replicate_service.api_token = t
+        if "REPLICATE_API_TOKEN=" in env_content:
+            env_content = re.sub(r'REPLICATE_API_TOKEN=.*', f'REPLICATE_API_TOKEN={t}', env_content)
         else:
-            env_content += f"\nKLING_API_KEY={k}\n"
+            env_content += f"\nREPLICATE_API_TOKEN={t}\n"
 
-    if payload.access_key and payload.secret_key:
-        ak = payload.access_key.strip()
-        sk = payload.secret_key.strip()
-        os.environ["KLING_ACCESS_KEY"] = ak
-        os.environ["KLING_SECRET_KEY"] = sk
-        kling_service.access_key = ak
-        kling_service.secret_key = sk
-        if "KLING_ACCESS_KEY=" in env_content:
-            env_content = re.sub(r'KLING_ACCESS_KEY=.*', f'KLING_ACCESS_KEY={ak}', env_content)
-            env_content = re.sub(r'KLING_SECRET_KEY=.*', f'KLING_SECRET_KEY={sk}', env_content)
-        else:
-            env_content += f"\nKLING_ACCESS_KEY={ak}\nKLING_SECRET_KEY={sk}\n"
+        if env_content and os.path.exists(env_file):
+            try:
+                with open(env_file, "w", encoding="utf-8") as f:
+                    f.write(env_content)
+            except Exception as e:
+                print(f"Error persisting .env: {e}")
 
-    if env_content and os.path.exists(env_file):
-        try:
-            with open(env_file, "w", encoding="utf-8") as f:
-                f.write(env_content)
-        except Exception as e:
-            print(f"Error persisting .env: {e}")
+    return {"status": "ok", "configured": replicate_service.is_configured()}
 
-    return {"status": "ok", "configured": kling_service.is_configured()}
+# Studio Endpoints: Autonomous Creation via DirectorAgent
+@app.post("/api/v1/studio/create-storyboard")
+async def create_storyboard(
+    input_mode: str = Form("prompt"),
+    topic_prompt: Optional[str] = Form(None),
+    script_text: Optional[str] = Form(None),
+    design_style: Optional[str] = Form("pixar_3d"),
+    custom_character: Optional[str] = Form(None),
+    custom_environment: Optional[str] = Form(None),
+    custom_design_prompt: Optional[str] = Form(None),
+    voice: Optional[str] = Form("Reference Voice Clone (100% Match)"),
+    background_music: Optional[str] = Form("inspiring_educational"),
+    file: Optional[UploadFile] = File(None)
+):
+    """
+    Autonomous Multi-Agent Creation:
+    Orchestrated by DirectorAgent delegating to ScriptAgent, DesignAgent, and ImageAgent.
+    """
+    file_bytes = None
+    filename = None
+    if input_mode == "document" and file:
+        file_bytes = await file.read()
+        filename = file.filename
 
+    project_config = director_agent.create_autonomous_storyboard(
+        input_mode=input_mode,
+        topic_prompt=topic_prompt,
+        script_text=script_text,
+        file_bytes=file_bytes,
+        filename=filename,
+        design_style=design_style or "pixar_3d",
+        custom_character=custom_character,
+        custom_environment=custom_environment,
+        custom_design_prompt=custom_design_prompt,
+        voice=voice or "Reference Voice Clone (100% Match)",
+        background_music=background_music or "inspiring_educational"
+    )
+
+    return {
+        "status": "success",
+        **project_config
+    }
+
+@app.post("/api/v1/studio/regenerate-image")
+def regenerate_scene_image_endpoint(payload: RegenerateImagePayload):
+    """Regenerates AI visual for a single scene via ImageAgent."""
+    img_res = director_agent.regenerate_scene_visual(
+        scene_index=payload.scene_index,
+        custom_prompt=payload.image_prompt
+    )
+    return {
+        "status": "regenerated",
+        "scene_index": payload.scene_index,
+        "image_path": img_res["local_path"],
+        "preview_url": img_res["preview_url"],
+        "provider": img_res["provider"]
+    }
+
+# Storyboard Config Persistence
 @app.get("/api/v1/custom/config")
 def get_custom_config():
     """Loads current storyboard project input."""
@@ -177,43 +238,20 @@ def get_custom_config():
                 data = json.load(f)
                 if "scenes" not in data and "demonstration_scenes" in data:
                     data["scenes"] = data["demonstration_scenes"]
+                if "background_music" not in data:
+                    data["background_music"] = "inspiring_educational"
+                if "design_style" not in data:
+                    data["design_style"] = "pixar_3d"
                 return data
         except Exception:
             pass
 
-    # Clean blank storyboard template
     return {
-        "title": "",
+        "title": "New Video Project",
         "voice": "Reference Voice Clone (100% Match)",
-        "scenes": [
-            {
-                "scene_number": 1,
-                "title": "Scene 1",
-                "image_path": "",
-                "preview_url": "",
-                "motion_prompt": "",
-                "narration": "",
-                "subtitle": ""
-            },
-            {
-                "scene_number": 2,
-                "title": "Scene 2",
-                "image_path": "",
-                "preview_url": "",
-                "motion_prompt": "",
-                "narration": "",
-                "subtitle": ""
-            },
-            {
-                "scene_number": 3,
-                "title": "Scene 3",
-                "image_path": "",
-                "preview_url": "",
-                "motion_prompt": "",
-                "narration": "",
-                "subtitle": ""
-            }
-        ]
+        "background_music": "inspiring_educational",
+        "design_style": "pixar_3d",
+        "scenes": []
     }
 
 @app.post("/api/v1/custom/config")
@@ -227,7 +265,7 @@ def save_custom_config(payload: CustomVideoPayload):
 
 @app.post("/api/v1/custom/upload-image")
 async def upload_custom_image(file: UploadFile = File(...)):
-    """Uploads an image directly from the browser into backend/storage/uploads/."""
+    """Uploads an image directly from browser into backend/storage/uploads/."""
     filename = file.filename or "image.jpg"
     safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ")
     save_path = os.path.join(settings.UPLOADS_DIR, safe_name)
@@ -240,40 +278,6 @@ async def upload_custom_image(file: UploadFile = File(...)):
         "filename": safe_name,
         "local_path": save_path,
         "preview_url": f"/static/uploads/{safe_name}"
-    }
-
-@app.post("/api/v1/custom/upload-voice")
-async def upload_custom_voice(file: UploadFile = File(...)):
-    """Uploads any voice audio file (MP3/WAV/M4A) and normalizes it for zero-shot cloning."""
-    filename = file.filename or "my_voice.wav"
-    safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ")
-    raw_path = os.path.join(settings.UPLOADS_DIR, f"raw_{safe_name}")
-    with open(raw_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
-
-    # Normalize to 24000Hz mono PCM WAV for high fidelity cloning
-    norm_filename = f"voice_ref_{int(time.time())}.wav"
-    norm_path = os.path.join(settings.UPLOADS_DIR, norm_filename)
-    try:
-        ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
-        cmd = [
-            ffmpeg_bin, "-y", "-i", raw_path,
-            "-ac", "1", "-ar", "24000",
-            norm_path
-        ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        target_path = norm_path
-    except Exception as e:
-        print(f"Error normalizing audio: {e}")
-        target_path = raw_path
-
-    voice_id = f"custom_voice:{target_path}"
-    return {
-        "status": "uploaded",
-        "voice_id": voice_id,
-        "voice_name": f"My Cloned Voice ({file.filename})",
-        "preview_url": f"/static/uploads/{os.path.basename(target_path)}"
     }
 
 @app.post("/api/v1/custom/generate")
